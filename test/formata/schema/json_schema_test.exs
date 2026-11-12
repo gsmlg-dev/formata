@@ -17,10 +17,14 @@ defmodule Formata.Schema.JSONSchemaTest do
       document = %{"type" => "integer"}
       schema = js!(document)
 
-      assert %Schema{kind: :json_schema, dialect: :draft2020_12, backend: Backplane.JsonSchema} =
+      assert %Schema{
+               kind: :json_schema,
+               dialect: :draft2020_12,
+               backend: Formata.Backplane.JsonSchema
+             } =
                schema
 
-      assert %Backplane.JsonSchema.Types.Schema{} = schema.compiled
+      assert %Formata.Backplane.JsonSchema.Types.Schema{} = schema.compiled
       assert schema.source == document
     end
 
@@ -74,7 +78,8 @@ defmodule Formata.Schema.JSONSchemaTest do
     test "oneOf rejects a value that matches two branches" do
       schema = js!(%{"oneOf" => [%{"type" => "integer"}, %{"minimum" => 0}]})
 
-      assert {:error, [%Error{kind: :validation, code: :oneOf, backend: Backplane.JsonSchema}]} =
+      assert {:error,
+              [%Error{kind: :validation, code: :oneOf, backend: Formata.Backplane.JsonSchema}]} =
                Formata.validate(5, schema)
 
       assert :ok = Formata.validate(-5, schema)

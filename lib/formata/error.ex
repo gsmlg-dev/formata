@@ -18,12 +18,12 @@ defmodule Formata.Error do
     * `:code` - a stable machine-readable atom (for example `:syntax`,
       `:duplicate_key`, `:unrepresentable`, `:type`, `:required`,
       `:unknown_field`, `:oneOf`). Validation codes are taken from the backend
-      (`Backplane.Schema.Error.code` for native schemas,
-      `Backplane.JsonSchema.Types.Error.rule` for JSON Schema).
+      (`Formata.Backplane.Schema.Error.code` for native schemas,
+      `Formata.Backplane.JsonSchema.Types.Error.rule` for JSON Schema).
     * `:message` - a human-readable message.
     * `:backend` - the module that produced or detected the failure
-      (`Jason`, `Toml`, `YamlElixir`, `Ymlr`, `Backplane.Schema`,
-      `Backplane.JsonSchema`, or a Formata module for checks Formata performs).
+      (`Formata.Jason`, `Formata.Toml`, `Formata.YamlElixir`, `Formata.Ymlr`, `Formata.Backplane.Schema`,
+      `Formata.Backplane.JsonSchema`, or a Formata module for checks Formata performs).
     * `:format` - the codec format (`:json`, `:toml`, `:yaml`) when relevant.
     * `:path` - the data path as a list of map keys and list indexes
       (`[]` is the root).

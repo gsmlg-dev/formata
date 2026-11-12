@@ -1,7 +1,7 @@
 defmodule Formata.Codec.YAML do
   @moduledoc """
-  Single-document YAML codec: decoding with `YamlElixir` (yamerl), encoding
-  with `Ymlr`.
+  Single-document YAML codec: decoding with `Formata.YamlElixir` (yamerl), encoding
+  with `Formata.Ymlr`.
 
   ## Decoding
 
@@ -47,14 +47,14 @@ defmodule Formata.Codec.YAML do
   def decode(input, opts \\ [])
 
   def decode(input, opts) when is_binary(input) and is_list(opts) do
-    case YamlElixir.read_all_from_string(input) do
+    case Formata.YamlElixir.read_all_from_string(input) do
       {:ok, []} ->
         {:ok, nil}
 
       {:ok, [document]} ->
         with {:ok, root} <- check_structure(input) do
-          # YamlElixir maps a null document root to %{}; keep it null.
-          if match?({:yamerl_null, _, _, _}, root),
+          # Formata.YamlElixir maps a null document root to %{}; keep it null.
+          if match?({:formata_yamerl_null, _, _, _}, root),
             do: {:ok, nil},
             else: {:ok, normalize(document)}
         end
@@ -64,14 +64,14 @@ defmodule Formata.Codec.YAML do
           :parse,
           :multiple_documents,
           "expected a single YAML document, found #{length(documents)}",
-          backend: YamlElixir,
+          backend: Formata.YamlElixir,
           format: :yaml,
           details: %{count: length(documents)}
         )
 
-      {:error, %YamlElixir.ParsingError{} = error} ->
+      {:error, %Formata.YamlElixir.ParsingError{} = error} ->
         Error.error(:parse, :syntax, error.message || "malformed YAML",
-          backend: YamlElixir,
+          backend: Formata.YamlElixir,
           format: :yaml,
           location: location(error.line, error.column),
           details: %{type: error.type},
@@ -80,7 +80,7 @@ defmodule Formata.Codec.YAML do
 
       {:error, error} ->
         Error.error(:parse, :syntax, Exception.message(error),
-          backend: YamlElixir,
+          backend: Formata.YamlElixir,
           format: :yaml,
           cause: error
         )
@@ -102,22 +102,22 @@ defmodule Formata.Codec.YAML do
 
   defp normalize(value), do: value
 
-  # YamlElixir folds duplicate keys (first wins) and rewrites `<<` keys, so the
+  # Formata.YamlElixir folds duplicate keys (first wins) and rewrites `<<` keys, so the
   # detailed yamerl node tree is inspected for those before values are used.
   defp check_structure(input) do
     nodes =
-      :yamerl_constr.string(input,
+      :formata_yamerl_constr.string(input,
         detailed_constr: true,
         keep_duplicate_keys: true,
         str_node_as_binary: true
       )
 
-    [{:yamerl_doc, root}] = nodes
+    [{:formata_yamerl_doc, root}] = nodes
 
     with :ok <- check_node(root, []), do: {:ok, root}
   end
 
-  defp check_node({:yamerl_map, _module, _tag, _loc, pairs}, path) do
+  defp check_node({:formata_yamerl_map, _module, _tag, _loc, pairs}, path) do
     Enum.reduce_while(pairs, {:ok, MapSet.new()}, fn {key, value}, {:ok, seen} ->
       key_value = node_value(key)
       loc = node_loc(key)
@@ -135,7 +135,7 @@ defmodule Formata.Codec.YAML do
         MapSet.member?(seen, key_value) ->
           {:halt,
            Error.error(:parse, :duplicate_key, "duplicate mapping key #{inspect(key_value)}",
-             backend: YamlElixir,
+             backend: Formata.YamlElixir,
              format: :yaml,
              path: Enum.reverse(path),
              location: loc,
@@ -155,7 +155,7 @@ defmodule Formata.Codec.YAML do
     end
   end
 
-  defp check_node({:yamerl_seq, _module, _tag, _loc, items, _count}, path) do
+  defp check_node({:formata_yamerl_seq, _module, _tag, _loc, items, _count}, path) do
     items
     |> Enum.with_index()
     |> Enum.reduce_while(:ok, fn {item, i}, :ok ->
@@ -168,11 +168,11 @@ defmodule Formata.Codec.YAML do
 
   defp check_node(_scalar, _path), do: :ok
 
-  defp node_value({:yamerl_map, _, _, _, pairs}),
+  defp node_value({:formata_yamerl_map, _, _, _, pairs}),
     do: Map.new(pairs, fn {k, v} -> {node_value(k), node_value(v)} end)
 
-  defp node_value({:yamerl_seq, _, _, _, items, _}), do: Enum.map(items, &node_value/1)
-  defp node_value({:yamerl_null, _, _, _}), do: nil
+  defp node_value({:formata_yamerl_seq, _, _, _, items, _}), do: Enum.map(items, &node_value/1)
+  defp node_value({:formata_yamerl_null, _, _, _}), do: nil
   defp node_value({_type, _module, _tag, _loc, value}), do: value
   defp node_value(other), do: other
 
@@ -210,20 +210,20 @@ defmodule Formata.Codec.YAML do
   end
 
   defp emit(data) do
-    case Ymlr.document(to_ymlr(data)) do
+    case Formata.Ymlr.document(to_ymlr(data)) do
       {:ok, yaml} ->
         {:ok, yaml}
 
       {:error, reason} ->
-        Error.error(:encode, :backend, "Ymlr failed to encode: #{inspect(reason)}",
-          backend: Ymlr,
+        Error.error(:encode, :backend, "Formata.Ymlr failed to encode: #{inspect(reason)}",
+          backend: Formata.Ymlr,
           format: :yaml,
           cause: reason
         )
     end
   end
 
-  # Ymlr spells special floats as these atoms.
+  # Formata.Ymlr spells special floats as these atoms.
   defp to_ymlr(:infinity), do: :inf
   defp to_ymlr(:negative_infinity), do: :"-inf"
   defp to_ymlr(list) when is_list(list), do: Enum.map(list, &to_ymlr/1)
@@ -242,7 +242,7 @@ defmodule Formata.Codec.YAML do
           :encode,
           :roundtrip_mismatch,
           "the YAML emitter produced output that reads back as a different value",
-          backend: Ymlr,
+          backend: Formata.Ymlr,
           format: :yaml,
           path: path,
           details: %{expected: get_path(data, path), actual: get_path(decoded, path)}
@@ -250,7 +250,7 @@ defmodule Formata.Codec.YAML do
 
       {:error, errors} ->
         Error.error(:encode, :roundtrip_mismatch, "the YAML emitter produced unreadable output",
-          backend: Ymlr,
+          backend: Formata.Ymlr,
           format: :yaml,
           cause: errors
         )

@@ -38,7 +38,8 @@ defmodule Formata.Codec.JSONTest do
     end
 
     test "syntax errors carry backend offset and derived line/column" do
-      assert {:error, [%Error{kind: :parse, code: :syntax, backend: Jason, location: loc}]} =
+      assert {:error,
+              [%Error{kind: :parse, code: :syntax, backend: Formata.Jason, location: loc}]} =
                Formata.decode("{\n  \"a\": ]\n}", :json)
 
       assert %{offset: 9, line: 2, column: 8} = loc

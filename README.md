@@ -3,8 +3,8 @@
 Composable data codecs, schemas, and validation for Elixir.
 
 Formata decodes and encodes **JSON**, **TOML**, and **YAML**, validates data
-against **native schemas** (`Backplane.Schema`) or **JSON Schema** documents
-(Draft 7 and Draft 2020-12, via `Backplane.JsonSchema`), and keeps every
+against **native schemas** (`Formata.Backplane.Schema`) or **JSON Schema** documents
+(Draft 7 and Draft 2020-12, via `Formata.Backplane.JsonSchema`), and keeps every
 lossy step explicit.
 
 It is a plain functional library: no processes, no global state, no caches.
@@ -102,7 +102,7 @@ Every expected failure is `{:error, errors}` with a non-empty list of
 ## Schemas
 
 Formata keeps the two schema systems separate. A JSON Schema document is
-always validated by `Backplane.JsonSchema` itself, never converted into a
+always validated by `Formata.Backplane.JsonSchema` itself, never converted into a
 native schema; native schemas are never exported to JSON Schema in order to
 validate data. Formata does not offer schema export or general schema
 conversion.
@@ -113,17 +113,17 @@ reuse it.
 
 ### Native schemas
 
-Native definitions are `Backplane.Schema` data: maps of field names to types
+Native definitions are `Formata.Backplane.Schema` data: maps of field names to types
 such as `:string`, `{:integer, gte: 0}`, `{:required, t}`, `{:list, t}`,
 `{:enum, values}`, `{:either, {a, b}}`, `{:custom, fun}`, and nested maps. Atom
 schema keys match string data keys. Reusable and recursive definitions use
-`Backplane.Schema.defschema/3` with `{:ref, {Module, name}}`; definitions are
+`Formata.Backplane.Schema.defschema/3` with `{:ref, {Module, name}}`; definitions are
 data, so they can also be composed with `Formata.Schema.Native.merge/2`,
 `select/2`, and `except/2`.
 
 ```elixir
 iex> defmodule MyApp.Schemas do
-...>   import Backplane.Schema
+...>   import Formata.Backplane.Schema
 ...>   defschema :node, %{name: {:required, :string}, children: {:list, {:ref, :node}}}
 ...> end
 iex> {:ok, tree} = Formata.Schema.native({:ref, {MyApp.Schemas, :node}})
@@ -159,7 +159,7 @@ iex> {:error, [%Formata.Error{kind: :unsupported, code: :pure_validation_unsuppo
 ```
 
 For native schemas, pure validation supports a documented non-transforming
-subset of `Backplane.Schema`. Defaults, coercions, transforms, encoders, and
+subset of `Formata.Backplane.Schema`. Defaults, coercions, transforms, encoders, and
 run-time-computed schemas are rejected *before anything runs*, with the schema
 path of the construct. Custom validators run in the native engine and must
 return `:ok` or an error; one that returns a new value is reported as

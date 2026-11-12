@@ -24,7 +24,7 @@ defmodule Formata.Codec.TOMLTest do
 
   defp roundtrip(data) do
     assert {:ok, toml} = Formata.encode(data, :toml)
-    assert {:ok, decoded} = Toml.decode(toml)
+    assert {:ok, decoded} = Formata.Toml.decode(toml)
     {toml, decoded}
   end
 
@@ -78,7 +78,7 @@ defmodule Formata.Codec.TOMLTest do
     end
 
     test "duplicate keys and malformed input are parse errors" do
-      assert {:error, [%Error{kind: :parse, code: :syntax, backend: Toml}]} =
+      assert {:error, [%Error{kind: :parse, code: :syntax, backend: Formata.Toml}]} =
                Formata.decode("a = 1\na = 2\n", :toml)
 
       # Line/column come from the decoder's own report.

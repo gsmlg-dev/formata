@@ -1,10 +1,10 @@
 defmodule Formata.Schema.Native do
   @moduledoc """
-  Native schemas: `Backplane.Schema` definitions used through Formata.
+  Native schemas: `Formata.Backplane.Schema` definitions used through Formata.
 
   ## Creating schemas
 
-  A native schema is plain Elixir data in the `Backplane.Schema` vocabulary:
+  A native schema is plain Elixir data in the `Formata.Backplane.Schema` vocabulary:
 
       definition = %{
         name: {:required, {:string, min: 1}},
@@ -22,12 +22,12 @@ defmodule Formata.Schema.Native do
   ### Reusable definitions
 
   Because definitions are data, they can be bound to variables and composed
-  (`merge/2`, `select/2`, `except/2` delegate to `Backplane.Schema`). Named,
-  reusable and recursive definitions use `Backplane.Schema.defschema/3` and
+  (`merge/2`, `select/2`, `except/2` delegate to `Formata.Backplane.Schema`). Named,
+  reusable and recursive definitions use `Formata.Backplane.Schema.defschema/3` and
   `{:ref, {Module, name}}`:
 
       defmodule MyApp.Schemas do
-        import Backplane.Schema
+        import Formata.Backplane.Schema
 
         defschema :address, %{city: {:required, :string}}
         defschema :person, %{
@@ -41,7 +41,7 @@ defmodule Formata.Schema.Native do
 
   ## Pure validation (`Formata.validate/3`)
 
-  `Backplane.Schema.validate/3` both validates and transforms (defaults,
+  `Formata.Backplane.Schema.validate/3` both validates and transforms (defaults,
   coercion, transforms, and strict-mode stripping/renaming of keys). Formata's
   pure validation therefore runs a preflight over the definition, including
   every reachable `{:ref, ...}` target, and supports this non-transforming
@@ -91,7 +91,7 @@ defmodule Formata.Schema.Native do
 
   ## Casting (`Formata.cast/3`)
 
-  `cast` runs the full native engine (`Backplane.Schema.validate/3`) and returns
+  `cast` runs the full native engine (`Formata.Backplane.Schema.validate/3`) and returns
   the transformed data. Modifiers wrap types, and each field is processed from
   the outermost modifier inwards:
 
@@ -105,7 +105,7 @@ defmodule Formata.Schema.Native do
        run for present, non-`nil` values, so write
        `{{type, {:transform, fun}}, {:default, value}}` to transform a default.
 
-  A default can never satisfy `{:required, ...}`: `Backplane.Schema` rejects
+  A default can never satisfy `{:required, ...}`: `Formata.Backplane.Schema` rejects
   that combination when the schema is compiled.
 
   Unknown fields are then handled by the `:unknown` option. With `:strip` (the
@@ -143,9 +143,9 @@ defmodule Formata.Schema.Native do
   @constraint_ops [:regex, :eq, :neq, :min, :max, :lt, :lte, :gt, :gte, :range, :multiple_of]
   @transforming_ops [:default, :transform, :encode]
 
-  defdelegate merge(schema1, schema2), to: Backplane.Schema
-  defdelegate select(schema, keys), to: Backplane.Schema
-  defdelegate except(schema, keys), to: Backplane.Schema
+  defdelegate merge(schema1, schema2), to: Formata.Backplane.Schema
+  defdelegate select(schema, keys), to: Formata.Backplane.Schema
+  defdelegate except(schema, keys), to: Formata.Backplane.Schema
 
   @doc """
   Checks and compiles a native definition.
@@ -156,13 +156,13 @@ defmodule Formata.Schema.Native do
   """
   @spec compile(term, keyword) :: {:ok, Schema.t()} | {:error, [Error.t(), ...]}
   def compile(definition, opts \\ []) when is_list(opts) do
-    case Backplane.Schema.validate_schema(definition) do
+    case Formata.Backplane.Schema.validate_schema(definition) do
       {:ok, checked} ->
         {:ok,
          %Schema{
            kind: :native,
            dialect: nil,
-           backend: Backplane.Schema,
+           backend: Formata.Backplane.Schema,
            compiled: checked,
            source: definition,
            options: opts,
@@ -192,7 +192,7 @@ defmodule Formata.Schema.Native do
     with {:ok, unknown} <- unknown_option(opts, :allow, [:allow, :reject]),
          {:ok, definition} <-
            fetch_plan(plans, if(unknown == :reject, do: :pure_reject, else: :pure_allow)) do
-      case Backplane.Schema.validate(definition, data, mode: :permissive) do
+      case Formata.Backplane.Schema.validate(definition, data, mode: :permissive) do
         {:ok, _ignored} -> :ok
         {:error, errors} -> {:error, data_errors(errors, data, :validate)}
       end
@@ -204,7 +204,7 @@ defmodule Formata.Schema.Native do
   def cast(%Schema{kind: :native, plans: plans}, data, opts) do
     with {:ok, unknown} <- unknown_option(opts, :strip, [:allow, :reject, :strip]),
          {:ok, definition, mode} <- cast_plan(plans, unknown, data) do
-      case Backplane.Schema.validate(definition, data, mode: mode) do
+      case Formata.Backplane.Schema.validate(definition, data, mode: mode) do
         {:ok, result} -> {:ok, result}
         {:error, errors} -> {:error, data_errors(errors, data, :cast)}
       end
@@ -232,7 +232,7 @@ defmodule Formata.Schema.Native do
         :unsupported,
         :unknown_allow_unsupported,
         "cast with unknown: :allow is not supported for atom-keyed schemas over " <>
-          "string-keyed data (Backplane.Schema permissive mode duplicates such fields; " <>
+          "string-keyed data (Formata.Backplane.Schema permissive mode duplicates such fields; " <>
           "see gsmlg-opt/backplane#171); use unknown: :strip, unknown: :reject, or a " <>
           "string-keyed schema",
         backend: __MODULE__
@@ -268,7 +268,7 @@ defmodule Formata.Schema.Native do
 
   # -- Plans ------------------------------------------------------------------------
 
-  # A plan is the definition actually executed by Backplane.Schema for one
+  # A plan is the definition actually executed by Formata.Backplane.Schema for one
   # operation. Plans only *add* checks (custom-result guards, unknown-field
   # rules) or replace references with lazily expanded equivalents; they never
   # remove a rule. `{:error, errors}` lists the constructs the operation cannot
@@ -330,7 +330,7 @@ defmodule Formata.Schema.Native do
        when type in @scalar_with_options and op in @constraint_ops,
        do: {d, []}
 
-  # Backplane.Schema matches these modifiers before structural forms, so
+  # Formata.Backplane.Schema matches these modifiers before structural forms, so
   # `{:list, {:default, []}}` is a default over `:list`.
   defp walk({t, {op, arg}}, ctx) when op in @transforming_ops do
     {t, errors} = walk(t, ctx)
@@ -595,7 +595,7 @@ defmodule Formata.Schema.Native do
             {:error, message} ->
               [
                 Error.new(:schema, :unresolved_ref, message,
-                  backend: Backplane.Schema,
+                  backend: Formata.Backplane.Schema,
                   schema_path: ctx.path
                 )
               ]
@@ -652,7 +652,7 @@ defmodule Formata.Schema.Native do
         {:error, errors} when is_list(errors) ->
           result
 
-        %Backplane.Schema.Error{} ->
+        %Formata.Backplane.Schema.Error{} ->
           result
 
         other ->
@@ -663,7 +663,7 @@ defmodule Formata.Schema.Native do
     end
   end
 
-  # Mirrors Backplane.Schema's dispatch for each custom validator form.
+  # Mirrors Formata.Backplane.Schema's dispatch for each custom validator form.
   defp call_custom(fun, value, _root) when is_function(fun, 1), do: fun.(value)
   defp call_custom(fun, value, root) when is_function(fun, 2), do: fun.(value, root)
 
@@ -747,7 +747,7 @@ defmodule Formata.Schema.Native do
     |> leaves()
     |> Enum.map(fn error ->
       Error.new(:schema, :invalid_schema, error.message || "invalid schema definition",
-        backend: Backplane.Schema,
+        backend: Formata.Backplane.Schema,
         schema_path: error.path || [],
         details: clean_content(error.content),
         cause: error
@@ -773,7 +773,7 @@ defmodule Formata.Schema.Native do
       Map.has_key?(content, :formata_non_pure_custom) ->
         [
           Error.new(:unsupported, :non_pure_custom, error.message,
-            backend: Backplane.Schema,
+            backend: Formata.Backplane.Schema,
             path: path,
             details: clean_content(content),
             cause: error
@@ -786,7 +786,7 @@ defmodule Formata.Schema.Native do
 
         [
           Error.new(kind, code, error.message || "is invalid",
-            backend: Backplane.Schema,
+            backend: Formata.Backplane.Schema,
             path: path,
             details: clean_content(content),
             cause: error
@@ -817,7 +817,7 @@ defmodule Formata.Schema.Native do
       if key, do: "field #{inspect(key)} is not declared by the schema", else: cause.message
 
     Error.new(:validation, :unknown_field, message,
-      backend: Backplane.Schema,
+      backend: Formata.Backplane.Schema,
       path: path,
       details: %{key: key},
       cause: cause
@@ -826,10 +826,10 @@ defmodule Formata.Schema.Native do
 
   defp leaves(errors) do
     Enum.flat_map(errors, fn
-      %Backplane.Schema.Error{errors: [_ | _] = nested} -> leaves(nested)
-      %Backplane.Schema.Error{} = error -> [error]
+      %Formata.Backplane.Schema.Error{errors: [_ | _] = nested} -> leaves(nested)
+      %Formata.Backplane.Schema.Error{} = error -> [error]
       # Scalar roots can return bare `{:error, template, info}` tuples.
-      {:error, template, info} -> [Backplane.Schema.Error.new_single(template, info)]
+      {:error, template, info} -> [Formata.Backplane.Schema.Error.new_single(template, info)]
       {:error, nested} when is_list(nested) -> leaves(nested)
     end)
   end

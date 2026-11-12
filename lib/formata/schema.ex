@@ -4,10 +4,10 @@ defmodule Formata.Schema do
 
   Formata keeps two independent schema systems:
 
-    * `:native` - `Backplane.Schema` definitions (Elixir data). See
+    * `:native` - `Formata.Backplane.Schema` definitions (Elixir data). See
       `Formata.Schema.Native`.
     * `:json_schema` - JSON Schema documents (Draft 7 or Draft 2020-12),
-      compiled and validated by `Backplane.JsonSchema`. See
+      compiled and validated by `Formata.Backplane.JsonSchema`. See
       `Formata.Schema.JSONSchema`.
 
   A JSON Schema document is never converted into a native schema, and native
@@ -30,9 +30,9 @@ defmodule Formata.Schema do
 
     * `:kind` - `:native` or `:json_schema`
     * `:dialect` - `:draft7` or `:draft2020_12` for JSON Schema, `nil` for native
-    * `:backend` - `Backplane.Schema` or `Backplane.JsonSchema`
+    * `:backend` - `Formata.Backplane.Schema` or `Formata.Backplane.JsonSchema`
     * `:compiled` - the backend representation (the checked native definition or
-      a `Backplane.JsonSchema.Types.Schema`)
+      a `Formata.Backplane.JsonSchema.Types.Schema`)
     * `:source` - the definition/document as given
     * `:options` - the compile options
     * `:plans` - precomputed native execution plans (internal)

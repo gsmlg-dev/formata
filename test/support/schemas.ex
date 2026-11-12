@@ -1,6 +1,6 @@
 defmodule Formata.Test.Schemas do
   @moduledoc false
-  import Backplane.Schema
+  import Formata.Backplane.Schema
 
   defschema(:address, %{city: {:required, :string}, zip: {:string, regex: ~r/^\d{5}$/}})
 

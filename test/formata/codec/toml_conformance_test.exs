@@ -7,7 +7,7 @@ defmodule Formata.Codec.TOMLConformanceTest do
   Each fixture's tagged JSON is converted into the encoder's value domain,
   encoded, and then decoded again by:
 
-    * `Toml.decode/1` (gsmlg_toml), and
+    * `Formata.Toml.decode/1` (gsmlg_toml), and
     * Python's `tomllib` (an independent parser), when available.
 
   Both decodings must be semantically equal to the fixture.
@@ -27,9 +27,9 @@ defmodule Formata.Codec.TOMLConformanceTest do
   # enabled and tagged `:known_failure` until the encoder is fixed.
   @known_failures %{}
 
-  # Fixtures whose `Toml.decode/1` round-trip fails because of gsmlg_toml
+  # Fixtures whose `Formata.Toml.decode/1` round-trip fails because of gsmlg_toml
   # 1.0.0 decoder bugs (tomllib accepts the same encoded output and yields the
-  # fixture value). Only the Toml.decode test is tagged `:upstream_blocked`;
+  # fixture value). Only the Formata.Toml.decode test is tagged `:upstream_blocked`;
   # the tomllib test for these fixtures stays enabled.
   #
   # gsmlg-dev/gsmlg_umbrella#13 (inverted UTC offset sign) affects no fixture:
@@ -133,14 +133,14 @@ defmodule Formata.Codec.TOMLConformanceTest do
     if known_failure, do: @tag(:known_failure)
     if Map.has_key?(@upstream_blocked, name), do: @tag(:upstream_blocked)
 
-    test "Toml.decode round-trip: #{name}" do
+    test "Formata.Toml.decode round-trip: #{name}" do
       expected = load_fixture(unquote(path))
 
       assert {:ok, toml} = Encoder.encode(expected)
-      assert {:ok, decoded} = Toml.decode(toml)
+      assert {:ok, decoded} = Formata.Toml.decode(toml)
 
       assert same?(expected, decoded), """
-      Toml.decode/1 result differs from the fixture.
+      Formata.Toml.decode/1 result differs from the fixture.
       encoded TOML:
       #{toml}
       expected: #{inspect(expected, limit: :infinity)}
@@ -191,12 +191,12 @@ defmodule Formata.Codec.TOMLConformanceTest do
     end
 
     {out, 0} = System.cmd("python3", ["-I", "-c", @python_script, @tmp_dir])
-    Jason.decode!(out)
+    Formata.Jason.decode!(out)
   end
 
   # -- Tagged JSON -> Elixir value domain -----------------------------------------
 
-  defp load_fixture(path), do: path |> File.read!() |> Jason.decode!() |> from_tagged()
+  defp load_fixture(path), do: path |> File.read!() |> Formata.Jason.decode!() |> from_tagged()
 
   defp from_tagged(%{"type" => type, "value" => value} = map)
        when map_size(map) == 2 and is_binary(type) and is_binary(value),

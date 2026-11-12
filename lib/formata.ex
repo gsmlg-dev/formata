@@ -3,8 +3,8 @@ defmodule Formata do
   Composable data codecs, schemas, and validation for Elixir.
 
   Formata decodes and encodes JSON, TOML, and YAML, validates data against
-  native (`Backplane.Schema`) schemas or JSON Schema documents
-  (`Backplane.JsonSchema`), and applies explicit transformations.
+  native (`Formata.Backplane.Schema`) schemas or JSON Schema documents
+  (`Formata.Backplane.JsonSchema`), and applies explicit transformations.
 
       iex> {:ok, schema} = Formata.Schema.native(%{"port" => {:required, {:integer, gte: 1}}})
       iex> {:ok, data} = Formata.decode(~s({"port": 8080}), :json)

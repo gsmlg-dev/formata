@@ -6,9 +6,9 @@ defmodule Formata.Codec do
 
   | Format  | Module                | Decoder          | Encoder                     |
   | ------- | --------------------- | ---------------- | --------------------------- |
-  | `:json` | `Formata.Codec.JSON`  | `Jason`          | `Jason`                     |
-  | `:toml` | `Formata.Codec.TOML`  | `Toml` (gsmlg_toml) | `Formata.Codec.TOML.Encoder` |
-  | `:yaml` | `Formata.Codec.YAML`  | `YamlElixir`     | `Ymlr`                      |
+  | `:json` | `Formata.Codec.JSON`  | `Formata.Jason`          | `Formata.Jason`                     |
+  | `:toml` | `Formata.Codec.TOML`  | `Formata.Toml` (gsmlg_toml) | `Formata.Codec.TOML.Encoder` |
+  | `:yaml` | `Formata.Codec.YAML`  | `Formata.YamlElixir`     | `Formata.Ymlr`                      |
 
   A custom codec is any module implementing this behaviour; pass the module
   wherever a format atom is accepted.

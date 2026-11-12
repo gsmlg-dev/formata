@@ -1,6 +1,6 @@
 defmodule Formata.Codec.TOML do
   @moduledoc """
-  TOML codec: decoding with `gsmlg_toml` (`Toml.decode/2`), encoding with
+  TOML codec: decoding with `gsmlg_toml` (`Formata.Toml.decode/2`), encoding with
   `Formata.Codec.TOML.Encoder`.
 
   ## Decoding
@@ -38,13 +38,13 @@ defmodule Formata.Codec.TOML do
   def decode(input, opts) when is_binary(input) and is_list(opts) do
     toml_opts = [keys: :strings] ++ Keyword.take(opts, [:filename])
 
-    case Toml.decode(input, toml_opts) do
+    case Formata.Toml.decode(input, toml_opts) do
       {:ok, data} ->
         {:ok, data}
 
       {:error, {:invalid_toml, message}} = error ->
         Error.error(:parse, :syntax, String.trim(message),
-          backend: Toml,
+          backend: Formata.Toml,
           format: :toml,
           location: location(message),
           cause: error
@@ -52,7 +52,7 @@ defmodule Formata.Codec.TOML do
 
       {:error, reason} = error ->
         Error.error(:parse, :syntax, "invalid TOML: #{inspect(reason)}",
-          backend: Toml,
+          backend: Formata.Toml,
           format: :toml,
           cause: error
         )

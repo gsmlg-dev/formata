@@ -1,6 +1,6 @@
 defmodule Formata.Codec.JSON do
   @moduledoc """
-  JSON codec backed by `Jason`.
+  JSON codec backed by `Formata.Jason`.
 
   ## Decoding
 
@@ -9,8 +9,8 @@ defmodule Formata.Codec.JSON do
     * Duplicate object keys are rejected with a `:parse` / `:duplicate_key`
       error (RFC 8259 leaves their meaning undefined; Formata does not pick one).
     * Numbers become integers or floats; numbers outside the float range are a
-      syntax error reported by Jason.
-    * Syntax errors carry the byte offset reported by Jason and the line/column
+      syntax error reported by Formata.Jason.
+    * Syntax errors carry the byte offset reported by Formata.Jason and the line/column
       derived from it.
 
   Options: none.
@@ -38,16 +38,16 @@ defmodule Formata.Codec.JSON do
   def decode(input, opts \\ [])
 
   def decode(input, opts) when is_binary(input) and is_list(opts) do
-    case Jason.decode(input, objects: :ordered_objects) do
+    case Formata.Jason.decode(input, objects: :ordered_objects) do
       {:ok, value} ->
         case unorder(value, []) do
           {:ok, data} -> {:ok, data}
           {:error, error} -> {:error, [error]}
         end
 
-      {:error, %Jason.DecodeError{position: position} = error} ->
+      {:error, %Formata.Jason.DecodeError{position: position} = error} ->
         Error.error(:parse, :syntax, Exception.message(error),
-          backend: Jason,
+          backend: Formata.Jason,
           format: :json,
           location: Formata.Codec.offset_location(input, position),
           cause: error
@@ -55,13 +55,13 @@ defmodule Formata.Codec.JSON do
     end
   end
 
-  defp unorder(%Jason.OrderedObject{values: pairs}, path) do
+  defp unorder(%Formata.Jason.OrderedObject{values: pairs}, path) do
     Enum.reduce_while(pairs, {:ok, %{}}, fn {key, value}, {:ok, acc} ->
       if Map.has_key?(acc, key) do
         {:halt,
          {:error,
           Error.new(:parse, :duplicate_key, "duplicate object key #{inspect(key)}",
-            backend: Jason,
+            backend: Formata.Jason,
             format: :json,
             path: Enum.reverse(path),
             details: %{key: key}
@@ -107,13 +107,13 @@ defmodule Formata.Codec.JSON do
     pretty = Keyword.get(opts, :pretty, false)
 
     with :ok <- Formata.Codec.check_domain(data, @profile) do
-      case Jason.encode(data, pretty: pretty) do
+      case Formata.Jason.encode(data, pretty: pretty) do
         {:ok, json} ->
           {:ok, json}
 
         {:error, error} ->
           Error.error(:encode, :backend, Exception.message(error),
-            backend: Jason,
+            backend: Formata.Jason,
             format: :json,
             cause: error
           )

@@ -41,7 +41,8 @@ defmodule Formata.Codec.YAMLTest do
     end
 
     test "malformed YAML reports the backend location" do
-      assert {:error, [%Error{kind: :parse, code: :syntax, backend: YamlElixir, location: loc}]} =
+      assert {:error,
+              [%Error{kind: :parse, code: :syntax, backend: Formata.YamlElixir, location: loc}]} =
                Formata.decode("a: [1, 2\n", :yaml)
 
       assert %{line: 1, column: _} = loc
@@ -117,7 +118,7 @@ defmodule Formata.Codec.YAMLTest do
     end
 
     test "fails instead of emitting YAML that reads back differently" do
-      # Ymlr leaves ".5" unquoted, which YAML resolves to the float 0.5.
+      # Formata.Ymlr leaves ".5" unquoted, which YAML resolves to the float 0.5.
       assert {:error, [%Error{kind: :encode, code: :roundtrip_mismatch, path: ["v"]} = error]} =
                Formata.encode(%{"v" => ".5"}, :yaml)
 

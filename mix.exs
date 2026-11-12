@@ -26,28 +26,23 @@ defmodule Formata.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
+  # Formata has no runtime dependencies: the codec and schema backends are
+  # maintained forks under lib/formata/ and src/ (see NOTICE.md).
   defp deps do
     [
-      {:jason, "~> 1.4"},
-      {:gsmlg_toml, "~> 1.0"},
-      {:yaml_elixir, "~> 2.12"},
-      # Called directly for single-document and duplicate-key checks.
-      {:yamerl, "~> 0.10"},
-      {:ymlr, "~> 5.1"},
-      {:backplane_schema, "~> 1.10 and >= 1.10.76"},
-      {:backplane_json_schema, "~> 1.10 and >= 1.10.76"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
   end
 
   defp package do
     [
-      licenses: ["MIT"],
+      licenses: ["MIT", "Apache-2.0", "BSD-2-Clause"],
       links: %{
         "GitHub" => @source_url,
         "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
       },
-      files: ~w(lib mix.exs README.md CHANGELOG.md LICENSE NOTICE.md .formatter.exs docs)
+      files:
+        ~w(lib src include mix.exs README.md CHANGELOG.md LICENSE LICENSES NOTICE.md .formatter.exs docs)
     ]
   end
 
@@ -65,9 +60,28 @@ defmodule Formata.MixProject do
       ],
       groups_for_modules: [
         Codecs: [Formata.Codec, Formata.Codec.JSON, Formata.Codec.TOML, Formata.Codec.YAML],
-        Schemas: [Formata.Schema, Formata.Schema.Native, Formata.Schema.JSONSchema],
+        Schemas: [
+          Formata.Schema,
+          Formata.Schema.Native,
+          Formata.Schema.JSONSchema,
+          Formata.Backplane.Schema,
+          Formata.Backplane.Schema.Error
+        ],
         Support: [Formata.Transform, Formata.Error]
-      ]
+      ],
+      filter_modules: &public_module?/2
     ]
+  end
+
+  # Forked backends are internal, except the native schema vocabulary
+  # (`Formata.Backplane.Schema`) that callers use to define schemas.
+  @internal ~w(Jason Toml YamlElixir Ymlr ExJSONPointer Backplane)
+  defp public_module?(module, _metadata) do
+    case Module.split(module) do
+      ["Formata", "Backplane", "Schema"] -> true
+      ["Formata", "Backplane", "Schema", "Error"] -> true
+      ["Formata", name | _] -> name not in @internal
+      _ -> true
+    end
   end
 end
