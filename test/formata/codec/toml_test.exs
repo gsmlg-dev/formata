@@ -67,14 +67,68 @@ defmodule Formata.Codec.TOMLTest do
       assert %DateTime{time_zone: "Etc/UTC"} = data["odt"]
     end
 
-    # TODO(upstream): gsmlg-dev/gsmlg_umbrella#13 - gsmlg_toml inverts the offset sign.
-    @tag :upstream_blocked
+    # Regression: gsmlg-dev/gsmlg_umbrella#13 (offset sign was inverted).
     test "offset date-times decode to the correct instant" do
       assert {:ok, %{"odt" => odt}} = Formata.decode("odt = 1979-05-27T07:32:00-08:00", :toml)
       assert DateTime.compare(odt, ~U[1979-05-27 15:32:00Z]) == :eq
 
       assert {:ok, %{"odt" => odt}} = Formata.decode("odt = 2024-02-29T17:30:00+05:30", :toml)
       assert DateTime.compare(odt, ~U[2024-02-29 12:00:00Z]) == :eq
+
+      assert {:ok, %{"a" => ~U[1979-05-27 14:32:00Z]}} =
+               Formata.Toml.decode("a = 1979-05-27T07:32:00-07:00")
+
+      assert {:error, _} = Formata.Toml.decode("a = 1979-05-27T07:32:00+24:00")
+      assert {:error, _} = Formata.Toml.decode("a = 1979-05-27T07:32:00+00:60")
+    end
+
+    # Regression: gsmlg-dev/gsmlg_umbrella#14 (empty elements were dropped).
+    test "empty array-of-tables elements and their subtables are kept" do
+      assert {:ok, %{"a" => [%{}, %{"x" => 1}]}} = Formata.Toml.decode("[[a]]\n[[a]]\nx = 1")
+      assert {:ok, %{"a" => [%{}]}} = Formata.Toml.decode("[[a]]")
+      assert {:ok, %{"a" => [%{}, %{}, %{}]}} = Formata.Toml.decode("[[a]]\n[[a]]\n[[a]]\n")
+
+      assert {:ok, %{"a" => [%{"b" => %{"c" => 1}}, %{}]}} =
+               Formata.Toml.decode("[[a]]\n[a.b]\nc = 1\n[[a]]\n")
+
+      assert {:ok, %{"a" => [%{"b" => [%{}]}, %{"b" => [%{}, %{"y" => 2}]}]}} =
+               Formata.Toml.decode("[[a]]\n[[a.b]]\n[[a]]\n[[a.b]]\n[[a.b]]\ny = 2\n")
+    end
+
+    # Regression: gsmlg-dev/gsmlg_umbrella#15 (bare keys `true`/`false` were rejected).
+    test "true and false are valid bare keys" do
+      assert {:ok, %{"true" => 1, "false" => 2}} = Formata.Toml.decode("true = 1\nfalse = 2")
+      assert {:ok, %{"false" => false}} = Formata.Toml.decode("false = false")
+      assert {:ok, %{"true" => %{"false" => true}}} = Formata.Toml.decode("[true]\nfalse = true")
+      assert {:ok, %{"a" => %{"true" => %{"x" => 1}}}} = Formata.Toml.decode("a.true.x = 1")
+      assert {:ok, %{"t" => %{"true" => 1}}} = Formata.Toml.decode("t = { true = 1 }")
+      assert {:ok, %{"true-ish" => 1}} = Formata.Toml.decode("true-ish = 1")
+      assert {:error, _} = Formata.Toml.decode("a = truex")
+    end
+
+    # Regression: gsmlg-dev/gsmlg_umbrella#16 (local date-time before `,` crashed).
+    test "local date-times are delimited by array and inline-table punctuation" do
+      assert {:ok, %{"a" => [~N[1979-05-27 07:32:00], 1]}} =
+               Formata.Toml.decode("a = [1979-05-27T07:32:00, 1]")
+
+      assert {:ok, %{"a" => [~N[1979-05-27 07:32:00], ~D[2006-06-01]]}} =
+               Formata.Toml.decode("a = [1979-05-27T07:32:00,2006-06-01]")
+
+      assert {:ok, %{"a" => [~N[1979-05-27 07:32:00]]}} =
+               Formata.Toml.decode("a = [1979-05-27T07:32:00]")
+
+      assert {:ok, %{"t" => %{"d" => ~N[1979-05-27 07:32:00], "x" => 1}}} =
+               Formata.Toml.decode("t = { d = 1979-05-27T07:32:00, x = 1 }")
+
+      assert {:ok, %{"t" => %{"d" => ~N[1979-05-27 07:32:00]}}} =
+               Formata.Toml.decode("t = {d = 1979-05-27T07:32:00}")
+    end
+
+    test "decoder errors are returned, not raised, for invalid UTF-8 and escapes" do
+      assert {:error, [%Error{kind: :parse}]} = Formata.decode("a = 1\n\xDA", :toml)
+      assert {:error, [%Error{kind: :parse}]} = Formata.decode(~S(a = "\U0000000"), :toml)
+      assert {:error, [%Error{kind: :parse}]} = Formata.decode(~S(a = "\uD800"), :toml)
+      assert {:error, [%Error{kind: :parse}]} = Formata.decode(~S(a = "\d"), :toml)
     end
 
     test "duplicate keys and malformed input are parse errors" do
@@ -157,8 +211,6 @@ defmodule Formata.Codec.TOMLTest do
       assert {:ok, "at = 2024-02-29T17:30:00+05:30\n"} = Formata.encode(%{"at" => ist()}, :toml)
     end
 
-    # TODO(upstream): gsmlg-dev/gsmlg_umbrella#13 - gsmlg_toml inverts the offset sign.
-    @tag :upstream_blocked
     test "offset date-times round-trip to the same instant" do
       assert {:ok, toml} = Formata.encode(%{"at" => ist()}, :toml)
       assert {:ok, %{"at" => back}} = Formata.decode(toml, :toml)

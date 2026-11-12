@@ -111,7 +111,10 @@ defmodule Formata.Schema.Native do
   Unknown fields are then handled by the `:unknown` option. With `:strip` (the
   default) the result contains only declared fields, keyed by the schema's keys
   (an atom-keyed schema returns atom keys). With `:allow`, the result keeps the
-  input keys.
+  input keys: a declared field is written back under the key present in the
+  data (an atom schema key matching a string data key keeps the string key),
+  undeclared fields are kept unchanged, and a field added by a default uses the
+  schema's key.
 
   Coercion to `:atom!` is rejected (`:unsafe_atom_coercion`) because it would
   create atoms from input data.
@@ -179,8 +182,7 @@ defmodule Formata.Schema.Native do
       pure_allow: plan(definition, %{mode: :pure, reject: false}),
       pure_reject: plan(definition, %{mode: :pure, reject: true}),
       cast: plan(definition, %{mode: :cast, reject: false}),
-      cast_reject: plan(definition, %{mode: :cast, reject: true}),
-      atom_keyed: atom_keyed?(definition, MapSet.new())
+      cast_reject: plan(definition, %{mode: :cast, reject: true})
     }
   end
 
@@ -203,7 +205,7 @@ defmodule Formata.Schema.Native do
   @spec cast(Schema.t(), term, keyword) :: {:ok, term} | {:error, [Error.t(), ...]}
   def cast(%Schema{kind: :native, plans: plans}, data, opts) do
     with {:ok, unknown} <- unknown_option(opts, :strip, [:allow, :reject, :strip]),
-         {:ok, definition, mode} <- cast_plan(plans, unknown, data) do
+         {:ok, definition, mode} <- cast_plan(plans, unknown) do
       case Formata.Backplane.Schema.validate(definition, data, mode: mode) do
         {:ok, result} -> {:ok, result}
         {:error, errors} -> {:error, data_errors(errors, data, :cast)}
@@ -211,35 +213,18 @@ defmodule Formata.Schema.Native do
     end
   end
 
-  defp cast_plan(plans, :strip, _data) do
+  defp cast_plan(plans, :strip) do
     with {:ok, definition} <- fetch_plan(plans, :cast), do: {:ok, definition, :strict}
   end
 
   # With every input field declared, strict mode returns all of them, keyed as
-  # declared, and avoids the permissive-mode duplication described below.
-  defp cast_plan(plans, :reject, _data) do
+  # declared.
+  defp cast_plan(plans, :reject) do
     with {:ok, definition} <- fetch_plan(plans, :cast_reject), do: {:ok, definition, :strict}
   end
 
-  defp cast_plan(plans, :allow, data) do
-    # WORKAROUND(upstream): gsmlg-opt/backplane#171 - permissive mode writes
-    # updated values under atom schema keys next to the original string keys.
-    # Remove this guard once the fix is released and the cast `unknown: :allow`
-    # tests pass without it.
-    # TODO(upstream): gsmlg-opt/backplane#171
-    if plans.atom_keyed and string_keys?(data) do
-      Error.error(
-        :unsupported,
-        :unknown_allow_unsupported,
-        "cast with unknown: :allow is not supported for atom-keyed schemas over " <>
-          "string-keyed data (Formata.Backplane.Schema permissive mode duplicates such fields; " <>
-          "see gsmlg-opt/backplane#171); use unknown: :strip, unknown: :reject, or a " <>
-          "string-keyed schema",
-        backend: __MODULE__
-      )
-    else
-      with {:ok, definition} <- fetch_plan(plans, :cast), do: {:ok, definition, :permissive}
-    end
+  defp cast_plan(plans, :allow) do
+    with {:ok, definition} <- fetch_plan(plans, :cast), do: {:ok, definition, :permissive}
   end
 
   defp fetch_plan(plans, key) do
@@ -700,44 +685,6 @@ defmodule Formata.Schema.Native do
       {:error, "is not declared by the schema", [formata_unknown_fields: declared]}
     end
   end
-
-  # -- Workaround support ------------------------------------------------------------------
-
-  defp atom_keyed?(map, visiting) when is_map(map) and not is_struct(map) do
-    Enum.any?(map, fn {k, v} -> is_atom(k) or atom_keyed?(v, visiting) end)
-  end
-
-  defp atom_keyed?({:ref, {mod, name}} = key, visiting) when is_atom(mod) and is_atom(name) do
-    if MapSet.member?(visiting, key) do
-      false
-    else
-      case fetch_ref(mod, name) do
-        {:ok, target} -> atom_keyed?(target, MapSet.put(visiting, key))
-        {:error, _} -> false
-      end
-    end
-  end
-
-  defp atom_keyed?({:dependent, _}, _visiting), do: true
-
-  defp atom_keyed?(tuple, visiting) when is_tuple(tuple),
-    do: tuple |> Tuple.to_list() |> Enum.any?(&atom_keyed?(&1, visiting))
-
-  defp atom_keyed?(list, visiting) when is_list(list) do
-    Enum.any?(list, fn
-      {k, v} when is_atom(k) -> Keyword.keyword?(list) or atom_keyed?(v, visiting)
-      other -> atom_keyed?(other, visiting)
-    end)
-  end
-
-  defp atom_keyed?(_other, _visiting), do: false
-
-  defp string_keys?(map) when is_map(map) and not is_struct(map),
-    do: Enum.any?(map, fn {k, v} -> is_binary(k) or string_keys?(v) end)
-
-  defp string_keys?(list) when is_list(list), do: Enum.any?(list, &string_keys?/1)
-  defp string_keys?({_k, v}), do: string_keys?(v)
-  defp string_keys?(_), do: false
 
   # -- Error conversion ------------------------------------------------------------------------
 

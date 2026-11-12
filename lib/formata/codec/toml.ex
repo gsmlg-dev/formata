@@ -1,6 +1,6 @@
 defmodule Formata.Codec.TOML do
   @moduledoc """
-  TOML codec: decoding with `gsmlg_toml` (`Formata.Toml.decode/2`), encoding with
+  TOML codec: decoding with `Formata.Toml.decode/2` (forked from `gsmlg_toml`), encoding with
   `Formata.Codec.TOML.Encoder`.
 
   ## Decoding
@@ -9,7 +9,7 @@ defmodule Formata.Codec.TOML do
     * `inf`, `-inf`, `nan` become `:infinity`, `:negative_infinity`, `:nan`.
     * Local date, local time, and local date-time become `Date`, `Time`, and
       `NaiveDateTime`.
-    * Offset date-times become UTC `DateTime` values. `gsmlg_toml` converts the
+    * Offset date-times become UTC `DateTime` values. `Formata.Toml` converts the
       instant to UTC, so the original offset (for example `-08:00`) is not
       preserved; the instant is.
     * Duplicate keys and table redefinitions are rejected by the decoder as
@@ -59,7 +59,7 @@ defmodule Formata.Codec.TOML do
     end
   end
 
-  # gsmlg_toml embeds "on line N" and "at column M" in its messages.
+  # Formata.Toml embeds "on line N" and "at column M" in its messages.
   defp location(message) do
     line = Regex.run(~r/on line (\d+)/, message, capture: :all_but_first)
     column = Regex.run(~r/at column (\d+)/, message, capture: :all_but_first)

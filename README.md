@@ -19,12 +19,19 @@ def deps do
 end
 ```
 
-Requires Elixir 1.18 or later (the minimum of `backplane_schema` and
-`backplane_json_schema`) and Erlang/OTP 25 or later (the minimum of Elixir
+Requires Elixir 1.18 or later (the forked schema backends use Elixir 1.18's
+built-in `JSON` module) and Erlang/OTP 25 or later (the minimum of Elixir
 1.18). CI covers Elixir 1.18 and 1.20 on OTP 27/28.
 
-All backends are regular dependencies: `jason`, `gsmlg_toml`, `yaml_elixir`
-(with `yamerl`), `ymlr`, `backplane_schema`, `backplane_json_schema`.
+Formata has **no runtime dependencies**. Its backends are maintained forks,
+renamed into the `Formata` namespace so they never clash with the original
+packages in your project: `Formata.Jason` (from `jason`), `Formata.Toml`
+(`gsmlg_toml`), `Formata.YamlElixir` and `formata_yamerl` (`yaml_elixir`,
+`yamerl`), `Formata.Ymlr` (`ymlr`), `Formata.Backplane.Schema`
+(`backplane_schema`), `Formata.Backplane.JsonSchema` (`backplane_json_schema`),
+and `Formata.ExJSONPointer` (`ex_json_pointer`). Only `Formata.Backplane.Schema`
+is public API (the native schema vocabulary); the other forks are internal.
+Versions, licenses, and modifications are listed in [NOTICE.md](NOTICE.md).
 
 ## The workflow
 
@@ -219,11 +226,12 @@ Policies:
   date/time values with JSON Schema, convert them explicitly first
   (`temporal_to_iso8601/1`); otherwise validation reports `:non_json_value`.
 
-TOML is decoded by `gsmlg_toml`; `gsmlg_toml` has no encoder, so Formata
-includes `Formata.Codec.TOML.Encoder` (TOML 1.0.0). It is checked against the
-208 TOML 1.0.0 valid cases of the official `toml-test` suite: every encoded
-document is parsed by Python's `tomllib` as an independent parser and by
-`gsmlg_toml`.
+TOML is decoded by `Formata.Toml` and encoded by `Formata.Codec.TOML.Encoder`
+(TOML 1.0.0). Both are checked against the TOML 1.0.0 cases of the official
+`toml-test` suite: the decoder accepts all 208 valid documents with the
+expected values and rejects all 509 invalid ones, and every value from the
+valid cases is encoded and parsed again by `Formata.Toml` and by Python's
+`tomllib` as an independent parser.
 
 ## Errors
 
@@ -244,45 +252,31 @@ iex> Exception.message(error)
 
 ## Known limitations
 
-These are dependency issues tracked upstream. Tests covering them are tagged
-`:upstream_blocked`, excluded from the default run, and must pass before a
-release (`mix test --include upstream_blocked`).
-
-* TOML offset date-times with a non-zero offset decode to the wrong instant
-  (`gsmlg_toml` inverts the offset sign):
-  [gsmlg-dev/gsmlg_umbrella#13](https://github.com/gsmlg-dev/gsmlg_umbrella/issues/13).
-  Offsets are also normalized to UTC by the decoder.
-* TOML arrays of tables lose empty elements and their subtables when decoded:
-  [gsmlg-dev/gsmlg_umbrella#14](https://github.com/gsmlg-dev/gsmlg_umbrella/issues/14).
-* TOML bare keys `true`/`false` are rejected by the decoder:
-  [gsmlg-dev/gsmlg_umbrella#15](https://github.com/gsmlg-dev/gsmlg_umbrella/issues/15).
-* TOML arrays with a local date-time followed by `,` fail to decode:
-  [gsmlg-dev/gsmlg_umbrella#16](https://github.com/gsmlg-dev/gsmlg_umbrella/issues/16).
-
-Other limitations, by design or by backend:
-
-* `cast/3` with `unknown: :allow` is unsupported for atom-keyed native schemas
-  over string-keyed data (the native engine's permissive mode duplicates such
-  fields: [gsmlg-opt/backplane#171](https://github.com/gsmlg-opt/backplane/issues/171)).
-  Use `:strip`, `:reject`, or string-keyed schemas.
+* TOML offset date-times are normalized to UTC `DateTime` values; the
+  original offset is not kept.
 * Native schemas treat an explicit `nil` like an absent field.
 * Native `{:oneof, ...}` is "first matching branch"; JSON Schema `oneOf` is
   exclusive.
 * Unknown-field rejection is not available for native keyword-list schemas.
 * YAML timestamps decode as strings; YAML encoding rejects date/time values.
-* Formata works around two more upstream issues
-  ([gsmlg-opt/backplane#170](https://github.com/gsmlg-opt/backplane/issues/170):
-  `format` asserted by default;
-  [gsmlg-opt/backplane#172](https://github.com/gsmlg-opt/backplane/issues/172):
-  error-message paths); the workarounds are marked `WORKAROUND(upstream)` in
-  the source.
+* With `format_assertion: true`, `hostname`, `email`, `idn-hostname`, and
+  `idn-email` values that contain an A-label (`xn--...`) or a non-ASCII label
+  cannot be checked without the IDNA2008 tables. Validation returns a single
+  `:unsupported` / `:unsupported_format` error for them (never a pass or a
+  `:format` failure, and not invertible by `not`/`anyOf`/`oneOf`/`if`). Plain
+  ASCII names are fully checked.
+* Format assertion has known gaps outside the required JSON Schema test suite:
+  some edge cases of `email` (quoted local parts, `ipv6:` literals) and
+  `uri-template` (malformed `%` escapes, spaces, DEL) are judged incorrectly.
 
 ## Documentation
 
-* [Design notes](docs/design.md): contracts, dependency audit, and decisions.
+* [Design notes](docs/design.md): contracts, forked backends, and decisions.
 * [Release procedure](docs/release.md).
 * [Changelog](CHANGELOG.md), [third-party notices](NOTICE.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Formata's own code is MIT (see [LICENSE](LICENSE)). The forked backends keep
+their original licenses (MIT, Apache-2.0, BSD-2-Clause); see
+[NOTICE.md](NOTICE.md) and [LICENSES/](https://github.com/gsmlg-dev/formata/tree/main/LICENSES).

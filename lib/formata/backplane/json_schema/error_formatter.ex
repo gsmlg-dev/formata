@@ -246,6 +246,13 @@ defmodule Formata.Backplane.JsonSchema.ErrorFormatter do
     "Cannot determine whether input matches pattern #{inspect(pattern)}: regex engine error #{inspect(reason)}"
   end
 
+  defp format_message(%Error{
+         rule: :indeterminate_format,
+         context: %{contrast: format, input: input, error_detail: reason}
+       }) do
+    "Cannot determine whether #{inspect(input)} is a valid #{format}: #{reason}"
+  end
+
   defp format_message(%Error{rule: :pattern, context: %{contrast: pattern, input: input}}) do
     "String #{inspect(input)} does not match pattern: #{inspect(pattern)}"
   end
@@ -259,15 +266,24 @@ defmodule Formata.Backplane.JsonSchema.ErrorFormatter do
   defp format_path(path) when is_binary(path), do: path
   defp format_path([]), do: "/"
 
-  defp format_path([single]) when is_binary(single) or is_integer(single),
-    do: "/" <> to_string(single)
-
+  # Paths are stored innermost-first. Each segment is rendered as a JSON
+  # Pointer reference token: integers as decimal text, `~` and `/` escaped.
+  # Formata fork fix for gsmlg-opt/backplane#172 (integer segments used to be
+  # emitted as raw bytes by iodata concatenation).
   defp format_path(path) when is_list(path) do
-    iodata = [?/ | Enum.intersperse(Enum.reverse(path), ?/)]
-    IO.iodata_to_binary(iodata)
+    path
+    |> Enum.reverse()
+    |> Enum.map_join(&("/" <> pointer_token(&1)))
   end
 
   defp format_path(_), do: "/"
+
+  defp pointer_token(segment) when is_binary(segment),
+    do: segment |> String.replace("~", "~0") |> String.replace("/", "~1")
+
+  defp pointer_token(segment) when is_integer(segment), do: Integer.to_string(segment)
+  defp pointer_token(segment) when is_atom(segment), do: pointer_token(Atom.to_string(segment))
+  defp pointer_token(segment), do: inspect(segment)
 
   defp format_invalid_keyword("$ref", value, %{contrast: "string"}) do
     "Keyword '$ref' must be a string, got: #{inspect(value)}"

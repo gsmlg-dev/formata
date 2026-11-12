@@ -30,7 +30,18 @@ defmodule Formata.Schema.JSONSchema do
   `Formata.Backplane.JsonSchema` (`email`, `date-time`, `date`, `time`, `uri`, `ipv4`,
   `ipv6`, `hostname`, `regex`, `uuid`, ...). Unknown format names are always
   accepted. In Draft 2020-12, a custom meta-schema that enables the
-  format-assertion vocabulary also enables assertion.
+  format-assertion vocabulary also enables assertion; a document without
+  `$schema` uses the standard vocabularies, in which `format` is an annotation.
+
+  Internationalized names cannot be checked without the IDNA2008 Unicode
+  tables, which Formata does not include. When `hostname`, `email`,
+  `idn-hostname`, or `idn-email` is asserted and the value contains an A-label
+  (`xn--...`) or a non-ASCII label, validation stops with a single
+  `:unsupported` / `:unsupported_format` error at the value's path: the value
+  is neither accepted nor rejected as if it had been checked, and the result
+  cannot be inverted by `not`, `anyOf`, `oneOf`, or `if`. A value that is
+  invalid for another reason (for example an ASCII label with `_`) is still a
+  `:validation` / `:format` error. Plain ASCII host names are fully checked.
 
   ## References
 
@@ -61,8 +72,6 @@ defmodule Formata.Schema.JSONSchema do
   alias Formata.Error
   alias Formata.Schema
 
-  @draft2020_12_uri "https://json-schema.org/draft/2020-12/schema"
-
   @dialects %{draft7: "draft7", draft2020_12: "draft2020_12"}
 
   @compile_opts [:dialect, :format_assertion, :content_assertion, :loader, :base_uri]
@@ -87,7 +96,7 @@ defmodule Formata.Schema.JSONSchema do
     with :ok <- check_document(document),
          {:ok, backend_opts} <- backend_opts(opts),
          :ok <- check_dialect(document, opts),
-         {:ok, compiled} <- backend_compile(document, opts, backend_opts) do
+         {:ok, compiled} <- backend_compile(document, backend_opts) do
       {:ok,
        %Schema{
          kind: :json_schema,
@@ -178,28 +187,12 @@ defmodule Formata.Schema.JSONSchema do
 
   defp check_dialect(_document, _opts), do: :ok
 
-  defp backend_compile(document, opts, backend_opts) do
-    case Formata.Backplane.JsonSchema.compile(prepare(document, opts), backend_opts) do
+  defp backend_compile(document, backend_opts) do
+    case Formata.Backplane.JsonSchema.compile(document, backend_opts) do
       {:ok, compiled} -> {:ok, compiled}
       {:error, error} -> {:error, [compile_error(error)]}
     end
   end
-
-  # WORKAROUND(upstream): gsmlg-opt/backplane#170 - without `$schema`,
-  # Formata.Backplane.JsonSchema enables the Draft 2020-12 format-assertion vocabulary
-  # even when `format_assertion: false`. Declaring the standard 2020-12
-  # meta-schema (the same dialect the spec defaults to) restores annotation-only
-  # `format`. Remove once the fix is released and the format tests pass without it.
-  # TODO(upstream): gsmlg-opt/backplane#170
-  defp prepare(document, opts) when is_map(document) do
-    if not Map.has_key?(document, "$schema") and opts[:dialect] in [nil, :draft2020_12] do
-      Map.put(document, "$schema", @draft2020_12_uri)
-    else
-      document
-    end
-  end
-
-  defp prepare(document, _opts), do: document
 
   defp compile_error(%Formata.Backplane.JsonSchema.Types.Error{rule: rule} = error) do
     code =
@@ -285,6 +278,9 @@ defmodule Formata.Schema.JSONSchema do
              ] ->
           {:schema, :unresolved_ref}
 
+        {:indeterminate_format, _} ->
+          {:unsupported, :unsupported_format}
+
         {rule, _} ->
           {:validation, rule}
       end
@@ -297,11 +293,8 @@ defmodule Formata.Schema.JSONSchema do
     )
   end
 
-  # WORKAROUND(upstream): gsmlg-opt/backplane#172 - format_error/1 renders
-  # integer path segments as raw bytes in its "At /..." prefix. The message is
-  # formatted without the path; Formata.Error renders the path itself.
-  # Remove once fixed upstream (the message tests still pass).
-  # TODO(upstream): gsmlg-opt/backplane#172
+  # `Formata.Error` renders the data path itself (`Exception.message/1`), so the
+  # backend message is formatted without its "At /...:" location prefix.
   defp message(error), do: Formata.Backplane.JsonSchema.format_error(%{error | path: []})
 
   defp context_details(%{context: nil}), do: %{}

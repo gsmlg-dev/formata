@@ -100,6 +100,7 @@ defmodule Formata.Schema.JSONSchemaTest do
 
       assert String.valid?(error.message)
       assert Exception.message(error) == "at /user/tags/1: Expected type string, got integer"
+      assert error.message == "Expected type string, got integer"
     end
 
     test "additionalProperties and unevaluatedProperties come from the document only" do
@@ -281,11 +282,77 @@ defmodule Formata.Schema.JSONSchemaTest do
     end
 
     test "default dialect without $schema is annotation-only too" do
-      # WORKAROUND(upstream): gsmlg-opt/backplane#170 makes this hold.
+      # Regression for gsmlg-opt/backplane#170 (fixed in the fork; the document
+      # is passed to the backend unchanged).
+      document = %{"properties" => %{"a" => %{"format" => "email"}}}
+      schema = js!(document)
+      assert schema.compiled.raw == document
+      assert :ok = Formata.validate(%{"a" => "x"}, schema)
       assert :ok = Formata.validate("x", js!(%{"format" => "email"}))
+      assert :ok = Formata.validate("x", js!(true, format_assertion: false))
 
-      assert {:error, [%Error{code: :format}]} =
-               Formata.validate("x", js!(%{"format" => "email"}, format_assertion: true))
+      assert {:error, [%Error{code: :format, path: ["a"]}]} =
+               Formata.validate(%{"a" => "x"}, js!(document, format_assertion: true))
+    end
+
+    test "internationalized names that cannot be checked are unsupported, never passed or failed" do
+      for {format, value} <- [
+            {"hostname", "xn--4gbwdl.xn--wgbh1c"},
+            {"email", "ada@xn--4gbwdl.com"},
+            {"idn-hostname", "실례.테스트"},
+            {"idn-email", "실례@실례.테스트"}
+          ],
+          dialect <- [:draft7, :draft2020_12] do
+        schema = %{"properties" => %{"v" => %{"format" => format}}}
+
+        assert {:error, [%Error{kind: :unsupported, code: :unsupported_format, path: ["v"]}]} =
+                 Formata.validate(
+                   %{"v" => value},
+                   js!(schema, dialect: dialect, format_assertion: true)
+                 ),
+               "#{dialect} #{format} #{value}"
+
+        # Combinators cannot turn the unchecked result into a pass.
+        for wrapper <- [
+              %{"not" => schema},
+              %{"anyOf" => [schema, %{"type" => "integer"}]},
+              %{"if" => schema, "then" => true, "else" => true}
+            ] do
+          assert {:error, [%Error{kind: :unsupported, code: :unsupported_format}]} =
+                   Formata.validate(
+                     %{"v" => value},
+                     js!(wrapper, dialect: dialect, format_assertion: true)
+                   )
+        end
+
+        # Annotation-only format never looks at the value.
+        assert :ok = Formata.validate(%{"v" => value}, js!(schema, dialect: dialect))
+      end
+    end
+
+    test "names that are invalid for another reason are still rejected" do
+      for {format, value} <- [
+            {"hostname", "xn--4gbwdl.bad_label"},
+            {"hostname", "xn--bad_label"},
+            {"hostname", "ex_ample.com"},
+            {"hostname", "실례.com"},
+            {"email", "a@b@xn--4gbwdl.com"},
+            {"idn-hostname", "실례..테스트"},
+            {"idn-hostname", "-bad.테스트"}
+          ] do
+        assert {:error, [%Error{kind: :validation, code: :format}]} =
+                 Formata.validate(value, js!(%{"format" => format}, format_assertion: true)),
+               "#{format} #{value}"
+      end
+
+      for {format, value} <- [
+            {"hostname", "example.com"},
+            {"idn-hostname", "example.com"},
+            {"email", "ada@example.com"},
+            {"idn-email", "실례@example.com"}
+          ] do
+        assert :ok = Formata.validate(value, js!(%{"format" => format}, format_assertion: true))
+      end
     end
 
     test "unknown formats are accepted even when asserting" do

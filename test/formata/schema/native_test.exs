@@ -300,11 +300,37 @@ defmodule Formata.Schema.NativeTest do
                Formata.cast(%{"name" => "a", "n" => "1"}, string_keyed, unknown: :reject)
     end
 
-    test "cast unknown: :allow with atom-keyed schemas over string data is explicitly unsupported",
+    test "cast unknown: :allow with atom-keyed schemas keeps the data's own keys",
          %{schema: schema} do
-      # WORKAROUND(upstream): gsmlg-opt/backplane#171
-      assert {:error, [%Error{kind: :unsupported, code: :unknown_allow_unsupported}]} =
-               Formata.cast(%{"name" => "a"}, schema, unknown: :allow)
+      # Regression for gsmlg-opt/backplane#171 (fixed in the fork): permissive
+      # mode used to add updated values under atom keys next to the string keys.
+      data = %{"name" => "a", "x" => 1, "address" => %{"city" => "c", "y" => 2}}
+      assert {:ok, result} = Formata.cast(data, schema, unknown: :allow)
+      assert result == data
+
+      coercing =
+        native!(%{
+          n: {:coerce, :integer},
+          u: %{m: {:coerce, :integer}},
+          l: {:list, %{k: {:coerce, :integer}}},
+          d: {:integer, {:default, 7}}
+        })
+
+      assert {:ok, result} =
+               Formata.cast(
+                 %{"n" => "1", "u" => %{"m" => "2"}, "l" => [%{"k" => "3"}], "x" => true},
+                 coercing,
+                 unknown: :allow
+               )
+
+      # A field added by a default has no data key, so it uses the schema key.
+      assert result == %{
+               "n" => 1,
+               "u" => %{"m" => 2},
+               "l" => [%{"k" => 3}],
+               "x" => true,
+               :d => 7
+             }
 
       assert {:ok, %{name: "a", extra: 1}} =
                Formata.cast(%{name: "a", extra: 1}, schema, unknown: :allow)

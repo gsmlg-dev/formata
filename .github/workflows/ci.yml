@@ -45,24 +45,6 @@ jobs:
       - run: mix compile --warnings-as-errors --force
       - run: mix test
 
-  # Release gate: tests for confirmed upstream bugs must pass before a tag ships.
-  release-gate:
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
-        with:
-          elixir-version: "1.20.4"
-          otp-version: "28.5"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: mix deps.get
-      - run: mix test --include upstream_blocked
-        env:
-          MIX_ENV: test
-
   package:
     runs-on: ubuntu-24.04
     steps:

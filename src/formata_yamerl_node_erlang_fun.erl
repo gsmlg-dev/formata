@@ -40,7 +40,7 @@
     node_pres/1
   ]).
 
--define(TAG, "tag:formata_yamerl,2012:fun").
+-define(TAG, "tag:yamerl,2012:fun").
 
 %% -------------------------------------------------------------------
 %% Public API.

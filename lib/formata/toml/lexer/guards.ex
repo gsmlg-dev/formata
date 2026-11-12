@@ -9,9 +9,9 @@ defmodule Formata.Toml.Lexer.Guards do
 
   defguard is_digit(c) when c >= ?0 and c <= ?9
 
-  defguard is_hex(c) when is_digit(c) or (c >= ?a and c <= ?z) or (c >= ?A and c <= ?Z)
+  defguard is_hex(c) when is_digit(c) or (c >= ?a and c <= ?f) or (c >= ?A and c <= ?F)
 
-  defguard is_octal(c) when c >= ?0 and c <= ?8
+  defguard is_octal(c) when c >= ?0 and c <= ?7
 
   defguard is_bin(c) when c == ?0 or c == ?1
 

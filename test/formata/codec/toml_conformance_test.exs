@@ -1,16 +1,19 @@
 defmodule Formata.Codec.TOMLConformanceTest do
   @moduledoc """
-  Conformance of `Formata.Codec.TOML.Encoder` against the TOML 1.0.0 `valid`
-  cases of the official toml-test suite (see
+  Conformance of `Formata.Codec.TOML.Encoder` and the `Formata.Toml` decoder
+  against the TOML 1.0.0 cases of the official toml-test suite (see
   `test/fixtures/toml-test/PROVENANCE.md`).
 
-  Each fixture's tagged JSON is converted into the encoder's value domain,
-  encoded, and then decoded again by:
+  Encoder: each `valid` fixture's tagged JSON is converted into the encoder's
+  value domain, encoded, and then decoded again by:
 
-    * `Formata.Toml.decode/1` (gsmlg_toml), and
+    * `Formata.Toml.decode/1`, and
     * Python's `tomllib` (an independent parser), when available.
 
   Both decodings must be semantically equal to the fixture.
+
+  Decoder: every `valid` `.toml` input must decode to its tagged-JSON
+  expectation, and every `invalid` input must be rejected.
   """
   use ExUnit.Case, async: true
 
@@ -26,31 +29,6 @@ defmodule Formata.Codec.TOMLConformanceTest do
   # Fixtures exposing encoder bugs, mapped to a description. These tests stay
   # enabled and tagged `:known_failure` until the encoder is fixed.
   @known_failures %{}
-
-  # Fixtures whose `Formata.Toml.decode/1` round-trip fails because of gsmlg_toml
-  # 1.0.0 decoder bugs (tomllib accepts the same encoded output and yields the
-  # fixture value). Only the Formata.Toml.decode test is tagged `:upstream_blocked`;
-  # the tomllib test for these fixtures stays enabled.
-  #
-  # gsmlg-dev/gsmlg_umbrella#13 (inverted UTC offset sign) affects no fixture:
-  # the encoder always emits offset date-times in UTC (`Z`).
-  @upstream_blocked %{
-    # TODO(upstream): gsmlg-dev/gsmlg_umbrella#15 - bare keys `true`/`false`
-    # are rejected (e.g. `false = false`, `[false]`).
-    "valid/comment/after-literal-no-ws" => "bare key `false` rejected",
-    "valid/key/special-word" => "bare key `false` rejected",
-    "valid/table/keyword" => "bare table key `false` rejected",
-    "valid/table/keyword-with-values" => "bare table key `false` rejected",
-    # TODO(upstream): gsmlg-dev/gsmlg_umbrella#14 - empty `[[a]]` elements and
-    # their subtables are dropped (`[[a]]` -> %{"a" => []}).
-    "valid/table/array-empty" => "trailing empty [[...]] element dropped",
-    "valid/array/open-parent-table" => "trailing empty [[...]] element dropped",
-    "valid/inline-table/empty" => "trailing empty [[...]] element dropped",
-    "valid/array/nested-inline-table" => "subtable of [[...]] element dropped",
-    # TODO(upstream): gsmlg-dev/gsmlg_umbrella#16 - a local date-time followed by
-    # `,` in an array fails (`a = [1979-05-27T07:32:00, 2006-06-01]`).
-    "valid/array/array" => "local date-time inside array crashes decoder"
-  }
 
   @tmp_dir Path.expand("../../../tmp/#{inspect(__MODULE__)}/tomllib", __DIR__)
 
@@ -131,7 +109,6 @@ defmodule Formata.Codec.TOMLConformanceTest do
 
     if excluded, do: @tag(skip: "excluded: #{excluded}")
     if known_failure, do: @tag(:known_failure)
-    if Map.has_key?(@upstream_blocked, name), do: @tag(:upstream_blocked)
 
     test "Formata.Toml.decode round-trip: #{name}" do
       expected = load_fixture(unquote(path))
@@ -172,6 +149,55 @@ defmodule Formata.Codec.TOMLConformanceTest do
         %{"error" => error} ->
           flunk("tomllib rejected the encoded TOML: #{error}\nencoded TOML:\n#{toml}")
       end
+    end
+  end
+
+  # -- Decoder conformance ----------------------------------------------------------
+
+  @valid_inputs @fixture_root |> Path.join("valid/**/*.toml") |> Path.wildcard() |> Enum.sort()
+  @invalid_inputs @fixture_root
+                  |> Path.join("invalid/**/*.toml")
+                  |> Path.wildcard()
+                  |> Enum.sort()
+
+  # Invalid documents that `Formata.Toml` currently accepts, mapped to the
+  # reason. These tests assert the document is still accepted, so fixing the
+  # decoder makes them fail until the entry is removed from this list.
+  @invalid_known_failures %{}
+
+  for path <- @valid_inputs do
+    @external_resource path
+    name = path |> Path.relative_to(@fixture_root) |> Path.rootname()
+    json = Path.rootname(path) <> ".json"
+
+    test "Formata.Toml.decode valid: #{name}" do
+      expected = load_fixture(unquote(json))
+
+      assert {:ok, decoded} = Formata.Toml.decode(File.read!(unquote(path)))
+
+      assert same?(expected, decoded), """
+      Formata.Toml.decode/1 result differs from the fixture.
+      expected: #{inspect(expected, limit: :infinity)}
+      actual:   #{inspect(decoded, limit: :infinity)}
+      """
+    end
+  end
+
+  for path <- @invalid_inputs do
+    @external_resource path
+    name = path |> Path.relative_to(@fixture_root) |> Path.rootname()
+
+    case Map.fetch(@invalid_known_failures, name) do
+      {:ok, reason} ->
+        test "Formata.Toml.decode invalid (known failure: #{reason}): #{name}" do
+          assert {:ok, _} = Formata.Toml.decode(File.read!(unquote(path))),
+                 "now rejected; remove #{unquote(name)} from @invalid_known_failures"
+        end
+
+      :error ->
+        test "Formata.Toml.decode invalid: #{name}" do
+          assert {:error, _} = Formata.Toml.decode(File.read!(unquote(path)))
+        end
     end
   end
 

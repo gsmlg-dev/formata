@@ -16,6 +16,8 @@ defmodule Formata.Toml.Builder do
   Starts a new table and sets the context for subsequent key/values
   """
   def push_table(%Document{} = doc, keypath) do
+    %Document{} = doc = define_header!(doc, keypath, :header)
+
     with {:ok, doc} = push_key(%Document{doc | open_table: nil}, keypath, {:table_decl, %{}}) do
       # We're explicitly opening a new table
       doc |> open(keypath) |> to_result()
@@ -26,10 +28,97 @@ defmodule Formata.Toml.Builder do
   Starts a new array of tables and sets the context for subsequent key/values
   """
   def push_table_array(%Document{} = doc, keypath) do
-    with {:ok, doc} = push_key(%Document{doc | open_table: nil}, keypath, {:table_array, []}) do
+    %Document{} = doc = define_header!(doc, keypath, :aot)
+
+    # Every `[[...]]` header starts a new (possibly empty) element
+    with {:ok, doc} =
+           push_key(%Document{doc | open_table: nil}, keypath, {:table_array, [%{}]}) do
       # We're explicitly opening a new table
       doc |> open(keypath) |> to_result()
     end
+  end
+
+  @doc """
+  Push a key/value pair (from a `key = value` line) into the TOML document.
+  """
+  def push_key_value(%Document{defs: defs, open_table: opened} = doc, keypath, value) do
+    case define_key_value(defs, opened || [], keypath, value) do
+      {:ok, defs} -> push_key(%Document{doc | defs: defs}, keypath, value)
+      {:error, :key_exists} -> key_exists!((opened || []) ++ keypath)
+    end
+  end
+
+  # How a keypath was defined, enforcing the TOML 1.0 table rules:
+  #
+  #   * `:header` - `[t]`; may be declared once, and not after `t` was
+  #     defined any other way than implicitly
+  #   * `:implicit` - a parent of a `[t]` / `[[t]]` header
+  #   * `:aot` - `[[t]]`; dotted keys may not extend it
+  #   * `:dotted` - a table created by a dotted key (`t.x = 1`); headers may
+  #     add sub-tables but may not declare it
+  #   * `:inline` - an inline table; complete, nothing may extend it
+  #   * `:value` - any other value
+  #
+  # Only the last element of an array of tables is addressable, so a new
+  # `[[t]]` element forgets the definitions below `t`.
+  @type definition :: :header | :implicit | :aot | :dotted | :inline | :value
+
+  @doc false
+  @spec define_key_value(map, [binary], [binary], term) :: {:ok, map} | {:error, :key_exists}
+  def define_key_value(defs, base, keypath, value) do
+    {parents, _} = Enum.split(keypath, -1)
+    path = base ++ keypath
+
+    with {:ok, defs} <- define_parents(defs, base, parents, [:dotted]),
+         false <- Map.has_key?(defs, path) do
+      kind = if is_map(value), do: :inline, else: :value
+      {:ok, Map.put(defs, path, kind)}
+    else
+      _ -> {:error, :key_exists}
+    end
+  end
+
+  defp define_header!(%Document{defs: defs} = doc, keypath, kind) do
+    {parents, _} = Enum.split(keypath, -1)
+
+    with {:ok, defs} <- define_parents(defs, [], parents, [:implicit, :header, :dotted, :aot]),
+         {:ok, defs} <- define_header(defs, keypath, kind, Map.get(defs, keypath)) do
+      %Document{doc | defs: defs}
+    else
+      {:error, :key_exists} -> key_exists!(keypath)
+    end
+  end
+
+  defp define_header(defs, keypath, :header, existing) when existing in [nil, :implicit],
+    do: {:ok, Map.put(defs, keypath, :header)}
+
+  defp define_header(defs, keypath, :aot, existing) when existing in [nil, :aot] do
+    depth = length(keypath)
+
+    defs =
+      Map.reject(defs, fn {path, _} ->
+        length(path) > depth and List.starts_with?(path, keypath)
+      end)
+
+    {:ok, Map.put(defs, keypath, :aot)}
+  end
+
+  defp define_header(_defs, _keypath, _kind, _existing), do: {:error, :key_exists}
+
+  # Defines the tables leading to a key: missing ones are created
+  # (`:dotted` for dotted keys, `:implicit` for headers); existing ones must be
+  # of an allowed kind.
+  defp define_parents(defs, base, parents, allowed) do
+    [new | _] = allowed
+
+    parents
+    |> Enum.scan(base, &(&2 ++ [&1]))
+    |> Enum.reduce_while({:ok, defs}, fn path, {:ok, defs} ->
+      case Map.get(defs, path) do
+        nil -> {:cont, {:ok, Map.put(defs, path, new)}}
+        kind -> if kind in allowed, do: {:cont, {:ok, defs}}, else: {:halt, {:error, :key_exists}}
+      end
+    end)
   end
 
   @doc """
@@ -50,7 +139,6 @@ defmodule Formata.Toml.Builder do
   child keys of existing tables is allowed. Table arrays considerably complicate this unfortunately.
   """
   def push_key(%Document{keys: ks} = doc, [key], value)
-      when is_map(value) and map_size(value) == 0
       when is_tuple(value) and elem(value, 0) == :table_decl do
     # New table
     keypath = [key]
@@ -71,6 +159,7 @@ defmodule Formata.Toml.Builder do
 
           Enum.all?(exists, fn
             {_, v} when is_map(v) -> true
+            {_, {:table_array, _}} -> true
             _ -> false
           end) ->
             # All keys are sub-tables, we'll allow this
@@ -214,77 +303,11 @@ defmodule Formata.Toml.Builder do
   # exist, instead it creates a new table (map) at the level needed, and continues
   # pushing the key into this new table
   @doc false
-  def push_key_into_table({:table_array, array}, [key], {:table_array, _} = value) do
-    case array do
-      [] ->
-        {:ok, {:table_array, [Map.put(%{}, key, value)]}}
-
-      [h | t] when is_map(h) ->
-        case Map.get(h, key) do
-          nil ->
-            {:ok, {:table_array, [Map.put(h, key, value) | t]}}
-
-          {:table_array, items} ->
-            {:ok, {:table_array, [Map.put(h, key, {:table_array, [%{} | items]}) | t]}}
-
-          _ ->
-            {:error, :key_exists}
-        end
-    end
-  end
-
-  def push_key_into_table({:table_array, array}, keypath, {:table_decl, value}) do
-    case array do
-      [] ->
-        {:ok, {:table_array, [value]}}
-
-      [h | t] when is_map(h) ->
-        case push_key_into_table(h, keypath, {:table_decl, value}) do
-          {:ok, h2} ->
-            {:ok, {:table_array, [h2 | t]}}
-
-          {:error, _} = err ->
-            err
-        end
-    end
-  end
-
-  def push_key_into_table({:table_array, array}, keypath, value) when is_map(value) do
-    case array do
-      [] ->
-        {:ok, {:table_array, [value]}}
-
-      [h | t] when is_map(h) ->
-        case push_key_into_table(h, keypath, value) do
-          {:ok, h2} ->
-            {:ok, {:table_array, [h2 | t]}}
-
-          {:error, _} = err ->
-            err
-        end
-    end
-  end
-
-  def push_key_into_table({:table_array, array}, keypath, value) do
-    # Adding key/value to last table item
-    case array do
-      [] ->
-        case push_key_into_table(%{}, keypath, value) do
-          {:ok, item} ->
-            {:ok, {:table_array, [item]}}
-
-          {:error, _} = err ->
-            err
-        end
-
-      [h | t] when is_map(h) ->
-        case push_key_into_table(h, keypath, value) do
-          {:ok, h2} ->
-            {:ok, {:table_array, [h2 | t]}}
-
-          {:error, _} = err ->
-            err
-        end
+  def push_key_into_table({:table_array, [h | t]}, keypath, value) when is_map(h) do
+    # Keys, tables and nested table arrays go into the last (current) element.
+    # Arrays of tables always hold at least one element (see `push_table_array/2`).
+    with {:ok, h2} <- push_key_into_table(h, keypath, value) do
+      {:ok, {:table_array, [h2 | t]}}
     end
   end
 

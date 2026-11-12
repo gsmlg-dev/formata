@@ -10,21 +10,22 @@ All of these must pass on the commit to release:
 mix deps.get
 mix format --check-formatted
 mix compile --warnings-as-errors --force
-mix test --include upstream_blocked   # includes the upstream regression tests
+mix test
 mix docs
 mix hex.build
 ```
 
-`--include upstream_blocked` is mandatory: those tests document dependency bugs
-that would otherwise ship as silent data loss. If any fails, the release is
-blocked until the dependency is fixed and updated (then remove the matching
-`TODO(upstream)` markers and `@tag :upstream_blocked` attributes).
+`mix test` includes the ported upstream suites of the forked backends
+(`test/formata/vendor/`), the TOML 1.0.0 `toml-test` suite, and the required
+JSON-Schema-Test-Suite cases for Draft 7 and Draft 2020-12. Run it on the
+oldest supported Elixir (1.18) as well; CI does.
 
 Also smoke-test the built package from an isolated consumer:
 
 ```sh
 mix hex.build --unpack -o /tmp/formata-unpacked
 # in a fresh project: {:formata, path: "/tmp/formata-unpacked"}; mix deps.get; run an example
+# (mix deps.get must fetch nothing: Formata has no runtime dependencies)
 ```
 
 ## Steps

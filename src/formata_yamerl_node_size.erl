@@ -41,7 +41,7 @@
     node_pres/1
   ]).
 
--define(TAG, "tag:formata_yamerl,2012:size").
+-define(TAG, "tag:yamerl,2012:size").
 
 -define(REGEX, "^([0-9]+)(k|M|G|T)(B?)$").
 

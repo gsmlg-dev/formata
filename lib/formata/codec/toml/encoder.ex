@@ -1,6 +1,4 @@
 defmodule Formata.Codec.TOML.Encoder do
-  # TODO(upstream): gsmlg-dev/gsmlg_umbrella#12 - adopt a published gsmlg_toml
-  # encoder once it exists and passes this suite.
   @moduledoc """
   Focused TOML 1.0.0 encoder.
 

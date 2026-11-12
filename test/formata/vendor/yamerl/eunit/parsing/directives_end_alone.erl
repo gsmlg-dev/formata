@@ -1,0 +1,55 @@
+-module(formata_yamerl_SUITE_parsing_directives_end_alone).
+
+-include_lib("eunit/include/eunit.hrl").
+
+single_test_() ->
+    ?_assertMatch(
+      {formata_yamerl_parser,
+        string,
+        [],
+        <<>>,
+        3,
+        true,
+        [],
+        0,
+        4,
+        1,
+        4,
+        false,
+        1,
+        4,
+        utf8,
+        false,
+        undefined,
+        _,
+        _,
+        [],
+        {bcoll,root,0,-1,1,1,-1,1,1},
+        false,
+        false,
+        false,
+        [{impl_key,false,false,undefined,undefined,1,1}],
+        false,
+        false,
+        _,
+        [],
+        0,
+        6,
+        5,
+        undefined,
+        undefined,
+        _,
+        false,
+        [],
+        [
+          {formata_yamerl_stream_end,1,4},
+          {formata_yamerl_doc_end,1,4},
+          {formata_yamerl_scalar,1,4,
+            {formata_yamerl_tag,1,4,{non_specific,"?"}},
+            flow,plain,""},
+          {formata_yamerl_doc_start,1,1,{1,2},_},
+          {formata_yamerl_stream_start,1,1,utf8}
+        ]
+      },
+      formata_yamerl_parser:string("---")
+    ).

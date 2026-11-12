@@ -328,36 +328,19 @@ defmodule Formata.Backplane.Schema do
     end
   end
 
-  @doc """
-  Converts a Formata.Backplane.Schema schema into a JSON Schema (Draft 7) map.
-
-  Reads `{:meta, type, opts}` annotations and emits `title`, `description`,
-  `examples`, `deprecated`. Dynamic types degrade per `:on_unsupported`
-  (`:omit | :true_schema | :raise`, default `:omit`).
-
-  Pass `:exclude_meta_keys` to drop annotation keywords from the output —
-  commonly `[:default]` when the consumer-facing schema should not surface
-  validation defaults.
-
-  ## Examples
-
-      iex> Formata.Backplane.Schema.to_json_schema(%{name: {:required, :string}})
-      %{"type" => "object", "properties" => %{"name" => %{"type" => "string"}}, "required" => ["name"]}
-
-      iex> Formata.Backplane.Schema.to_json_schema({:integer, {:default, 0}}, exclude_meta_keys: [:default])
-      %{"type" => "integer"}
-  """
+  # Formata fork: schema conversion is not part of Formata's public API. The
+  # export can omit unsupported constraints (`on_unsupported: :omit`) and the
+  # import turns `oneOf` into a first-match union, so neither is semantics-
+  # preserving. Kept undocumented for the ported upstream tests; Formata never
+  # converts schemas (see docs/design.md).
+  @doc false
   @spec to_json_schema(schema, Formata.Backplane.Schema.JSONSchema.Encoder.opts()) :: map
   defdelegate to_json_schema(schema, opts \\ []),
     to: Formata.Backplane.Schema.JSONSchema.Encoder,
     as: :encode
 
-  @doc """
-  Decodes a JSON Schema (Draft 7) map into a Formata.Backplane.Schema schema.
-
-  Returns `{:ok, schema}` if the resulting Formata.Backplane.Schema schema is valid, otherwise
-  `{:error, errors}`.
-  """
+  # Formata fork: not public API (see to_json_schema/2).
+  @doc false
   @spec from_json_schema(map, list(opt)) :: {:ok, schema} | {:error, term}
         when opt: {:keys, :strings | :atoms | :atoms!}
   defdelegate from_json_schema(json_schema, opts \\ []),
@@ -640,7 +623,7 @@ defmodule Formata.Backplane.Schema do
           parser
 
         {:ok, value} ->
-          Formata.Backplane.Schema.Parser.update_data(parser, key, value)
+          Formata.Backplane.Schema.Parser.update_data(parser, data_key(parser.data, key), value)
 
         {:error, [_ | _] = nested_errs} ->
           reduce_errors(path, key, nested_errs, parser)
@@ -652,6 +635,21 @@ defmodule Formata.Backplane.Schema do
       end
     end)
   end
+
+  # The key under which an updated value is written back: the key actually
+  # present in the data. An atom schema key matches a string data key, so
+  # writing under the schema key would keep the original string-keyed value
+  # next to the updated one. Absent fields are added under the schema key.
+  # Formata fork fix for gsmlg-opt/backplane#171.
+  defp data_key(data, key) when is_atom(key) and is_map(data) and not is_struct(data) do
+    string_key = Atom.to_string(key)
+
+    if not Map.has_key?(data, key) and Map.has_key?(data, string_key),
+      do: string_key,
+      else: key
+  end
+
+  defp data_key(_data, key), do: key
 
   defp traverse_schema_strict(
          schema,

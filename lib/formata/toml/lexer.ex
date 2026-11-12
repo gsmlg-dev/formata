@@ -306,6 +306,10 @@ defmodule Formata.Toml.Lexer do
   defp do_lex(<<c::utf8, _::binary>>, skip, lines),
     do: {:error, {:invalid_char, <<c::utf8>>}, skip + 1, lines}
 
+  # Invalid byte sequence (i.e. invalid unicode)
+  defp do_lex(<<c, _::binary>>, skip, lines),
+    do: {:error, {:invalid_unicode, <<c>>}, skip + 1, lines}
+
   defp lex_whitespace(<<c::utf8, rest::binary>>, skip, lines) when is_whitespace(c),
     do: lex_whitespace(rest, skip + 1, lines)
 
@@ -318,8 +322,17 @@ defmodule Formata.Toml.Lexer do
   defp lex_comment(<<?\n, rest::binary>>, skip, size, lines),
     do: {:ok, rest, {:comment, skip + 1, size, lines + 1}}
 
+  # Control characters other than tab are not allowed in comments
+  defp lex_comment(<<c::utf8, _::binary>>, skip, _size, lines)
+       when (c <= 31 and c != ?\t) or c == 127,
+       do: {:error, {:invalid_control_char, <<c::utf8>>}, skip + 1, lines}
+
   defp lex_comment(<<_::utf8, rest::binary>>, skip, size, lines),
     do: lex_comment(rest, skip + 1, size + 1, lines)
+
+  # Invalid byte sequence (i.e. invalid unicode)
+  defp lex_comment(<<c, _::binary>>, skip, _size, lines),
+    do: {:error, {:invalid_unicode, <<c>>}, skip + 1, lines}
 
   defp lex_comment(<<>> = rest, skip, size, lines),
     do: {:ok, rest, {:comment, skip, size, lines}}
@@ -332,9 +345,9 @@ defmodule Formata.Toml.Lexer do
     {:ok, rest, {:digits, skip, bin, lines}}
   end
 
-  defp lex_hex(<<c::utf8, ?_, d::utf8, rest::binary>>, skip, acc, lines)
-       when is_hex(c) and is_hex(d),
-       do: lex_hex(rest, skip + 3, [d, c | acc], lines)
+  # An underscore must sit between two digits; `acc` always holds at least one.
+  defp lex_hex(<<?_, d::utf8, rest::binary>>, skip, acc, lines) when is_hex(d),
+    do: lex_hex(rest, skip + 2, [d | acc], lines)
 
   defp lex_hex(<<c::utf8, rest::binary>>, skip, acc, lines) when is_hex(c),
     do: lex_hex(rest, skip + 1, [c | acc], lines)
@@ -344,9 +357,9 @@ defmodule Formata.Toml.Lexer do
     {:ok, rest, {:hex, skip, bin, lines}}
   end
 
-  defp lex_octal(<<c::utf8, ?_, d::utf8, rest::binary>>, skip, acc, lines)
-       when is_octal(c) and is_octal(d),
-       do: lex_octal(rest, skip + 3, [d, c | acc], lines)
+  # An underscore must sit between two digits; `acc` always holds at least one.
+  defp lex_octal(<<?_, d::utf8, rest::binary>>, skip, acc, lines) when is_octal(d),
+    do: lex_octal(rest, skip + 2, [d | acc], lines)
 
   defp lex_octal(<<c::utf8, rest::binary>>, skip, acc, lines) when is_octal(c),
     do: lex_octal(rest, skip + 1, [c | acc], lines)
@@ -356,9 +369,9 @@ defmodule Formata.Toml.Lexer do
     {:ok, rest, {:octal, skip, bin, lines}}
   end
 
-  defp lex_binary(<<c::utf8, ?_, d::utf8, rest::binary>>, skip, acc, lines)
-       when is_bin(c) and is_bin(d),
-       do: lex_binary(rest, skip + 3, [d, c | acc], lines)
+  # An underscore must sit between two digits; `acc` always holds at least one.
+  defp lex_binary(<<?_, d::utf8, rest::binary>>, skip, acc, lines) when is_bin(d),
+    do: lex_binary(rest, skip + 2, [d | acc], lines)
 
   defp lex_binary(<<c::utf8, rest::binary>>, skip, acc, lines) when is_bin(c),
     do: lex_binary(rest, skip + 1, [c | acc], lines)

@@ -4,7 +4,7 @@ defmodule Formata.Toml.Document do
   # Represents a TOML document, and handles conversion to a plain map
   # See `Formata.Toml.Builder` for the actual logic for constructing the document.
 
-  defstruct [:keys, :comments, :open_table, :comment_stack, :keyfun, :transforms]
+  defstruct [:keys, :comments, :open_table, :comment_stack, :keyfun, :transforms, defs: %{}]
 
   # A key is either binary or atom depending on the decoder option value
   @type key :: binary | atom | term
@@ -30,7 +30,8 @@ defmodule Formata.Toml.Document do
           open_table: keypath | nil,
           comment_stack: [binary],
           keyfun: nil | (binary -> term | no_return),
-          transforms: [Formata.Toml.Transform.t()]
+          transforms: [Formata.Toml.Transform.t()],
+          defs: %{keypath => Formata.Toml.Builder.definition()}
         }
 
   @doc """

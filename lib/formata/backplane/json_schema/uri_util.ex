@@ -33,10 +33,27 @@ defmodule Formata.Backplane.JsonSchema.URIUtil do
 
       true ->
         try do
-          base |> URI.merge(uri) |> URI.to_string()
+          base |> merge(uri) |> URI.to_string()
         rescue
           _ -> uri
         end
+    end
+  end
+
+  # RFC 3986 only requires the base to have a scheme. Elixir < 1.20 also
+  # requires a host, so opaque bases such as `urn:uuid:...` would lose their
+  # base when resolving `#anchor`. Formata fork fix: merge such bases through
+  # an empty host, as Elixir >= 1.20 does.
+  defp merge(base, uri) do
+    case URI.parse(base) do
+      %URI{scheme: scheme, host: nil} = parsed when is_binary(scheme) ->
+        case URI.merge(%{parsed | host: ""}, uri) do
+          %URI{host: ""} = merged -> %{merged | host: nil}
+          merged -> merged
+        end
+
+      parsed ->
+        URI.merge(parsed, uri)
     end
   end
 

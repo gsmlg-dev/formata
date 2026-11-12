@@ -36,7 +36,11 @@ defmodule Formata.Backplane.JsonSchema.Compiler do
       is_valid_types?: 1
     ]
 
-  @default_vocabs_list Dialect.supported_vocabularies()
+  # Active vocabularies when a schema does not declare a dialect (or its
+  # meta-schema declares no `$vocabulary`): the standard Draft 2020-12 set,
+  # which excludes format-assertion. Formata fork fix for gsmlg-opt/backplane#170
+  # (previously the full supported set, so `format` asserted by default).
+  @default_vocabs_list Dialect.default_active_vocabularies()
 
   defp vocab_supported?(supported, uri) when is_list(supported), do: uri in supported
 

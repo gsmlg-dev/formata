@@ -1,7 +1,18 @@
 defmodule Formata.Backplane.JsonSchema.Formats.Hostname do
   @moduledoc """
   Validates "hostname" format according to RFC 1123.
+
+  Deciding whether an A-label (`xn--...`) or a U-label (a non-ASCII label of an
+  `idn-hostname`) is valid requires the IDNA2008 Unicode tables (RFC 5891,
+  5892, 5893), which this library does not ship. Such inputs are reported as
+  indeterminate instead of being accepted or rejected (see
+  `Formata.Backplane.JsonSchema.Formats`), unless another label already makes
+  the name invalid. Formata fork change: upstream raised a `RuntimeError`
+  asking for the optional `:idna` dependency.
   """
+
+  @indeterminate_a_label "A-labels (xn--) cannot be validated without IDNA2008 tables"
+  @indeterminate_u_label "non-ASCII labels cannot be validated without IDNA2008 tables"
 
   def valid?(data) when is_binary(data) do
     if ascii?(data) do
@@ -32,10 +43,15 @@ defmodule Formata.Backplane.JsonSchema.Formats.Hostname do
     # Normalize IDNA separators to dots
     normalized = String.replace(data, ["\u3002", "\uFF0E", "\uFF61"], ".")
 
-    if ascii_and_size_le_253?(normalized) do
-      validate_ascii_hostname(normalized)
-    else
-      raise "The optional dependency :idna is required to validate idn-hostname with non-ASCII characters. Please add it to your mix.exs deps."
+    cond do
+      ascii_and_size_le_253?(normalized) ->
+        validate_ascii_hostname(normalized)
+
+      ascii?(normalized) ->
+        false
+
+      true ->
+        validate_unicode_hostname(normalized)
     end
   end
 
@@ -50,13 +66,42 @@ defmodule Formata.Backplane.JsonSchema.Formats.Hostname do
   defp validate_ascii_hostname(data) do
     # Check for empty labels (covers leading/trailing dots and consecutive dots)
     case check_and_split_hostname(data) do
+      {:ok, labels} -> labels |> Enum.map(&label_validity/1) |> combine()
+      _ -> false
+    end
+  end
+
+  # Non-ASCII labels are U-labels. An invalid ASCII label still decides the
+  # result; otherwise the name is indeterminate.
+  defp validate_unicode_hostname(data) do
+    case check_and_split_hostname(data) do
       {:ok, labels} ->
-        Enum.all?(labels, &valid_label?/1)
+        labels
+        |> Enum.map(fn label ->
+          if ascii?(label),
+            do: label_validity(label),
+            else: {:indeterminate, @indeterminate_u_label}
+        end)
+        |> combine()
 
       _ ->
         false
     end
   end
+
+  defp combine(results) do
+    cond do
+      false in results -> false
+      reason = Enum.find_value(results, &indeterminate_reason/1) -> indeterminate(reason)
+      true -> true
+    end
+  end
+
+  defp indeterminate_reason({:indeterminate, reason}), do: reason
+  defp indeterminate_reason(_), do: nil
+
+  defp indeterminate(reason),
+    do: throw({Formata.Backplane.JsonSchema.Formats, :indeterminate, reason})
 
   defp check_and_split_hostname(data) do
     labels = String.split(data, ".", trim: false)
@@ -68,18 +113,27 @@ defmodule Formata.Backplane.JsonSchema.Formats.Hostname do
     end
   end
 
-  defp valid_label?(label) when byte_size(label) > 63, do: false
+  defp label_validity(label) when byte_size(label) > 63, do: false
 
-  defp valid_label?(label) do
+  defp label_validity(label) do
     if String.starts_with?(String.downcase(label), "xn--") do
-      validate_idn_label(label)
+      a_label_validity(label)
     else
       validate_std_label(label)
     end
   end
 
-  defp validate_idn_label(_label) do
-    raise "The optional dependency :idna is required to validate Punycode (A-label) hostnames. Please add it to your mix.exs deps."
+  # An A-label is an LDH label, so anything else is invalid. Whether its
+  # Punycode encodes a valid U-label cannot be decided here.
+  defp a_label_validity(label) do
+    if ldh_label?(label), do: {:indeterminate, @indeterminate_a_label}, else: false
+  end
+
+  defp ldh_label?(label) do
+    not String.ends_with?(label, "-") and
+      label
+      |> :binary.bin_to_list()
+      |> Enum.all?(&(&1 in ?a..?z or &1 in ?A..?Z or &1 in ?0..?9 or &1 == ?-))
   end
 
   # Check for hyphens in 3rd and 4th position (indices 2 and 3)

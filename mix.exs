@@ -65,13 +65,19 @@ defmodule Formata.MixProject do
           Formata.Schema.Native,
           Formata.Schema.JSONSchema,
           Formata.Backplane.Schema,
-          Formata.Backplane.Schema.Error
+          Formata.Backplane.Schema.Error,
+          Formata.Backplane.Schema.Walker
         ],
         Support: [Formata.Transform, Formata.Error]
       ],
-      filter_modules: &public_module?/2
+      filter_modules: &public_module?/2,
+      skip_code_autolink_to: &internal_reference?/1
     ]
   end
+
+  # Mentions of internal fork modules stay plain code text in the docs.
+  @internal_ref ~r/^(?:[tc]:)?Formata\.(?:Jason|Toml|YamlElixir|Ymlr|ExJSONPointer|Backplane\.JsonSchema|Backplane\.Schema\.(?!(?:Error|Walker)\b)[A-Z])/
+  defp internal_reference?(term), do: Regex.match?(@internal_ref, term)
 
   # Forked backends are internal, except the native schema vocabulary
   # (`Formata.Backplane.Schema`) that callers use to define schemas.
@@ -80,6 +86,7 @@ defmodule Formata.MixProject do
     case Module.split(module) do
       ["Formata", "Backplane", "Schema"] -> true
       ["Formata", "Backplane", "Schema", "Error"] -> true
+      ["Formata", "Backplane", "Schema", "Walker"] -> true
       ["Formata", name | _] -> name not in @internal
       _ -> true
     end

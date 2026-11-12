@@ -30,7 +30,9 @@ defmodule Formata.Backplane.JsonSchema.Validator do
   @doc """
   Validates data against a compiled schema.
 
-  Regex engine errors abort validation with an `:indeterminate_pattern` error.
+  Regex engine errors abort validation with an `:indeterminate_pattern` error,
+  and asserted formats that cannot be decided (see
+  `Formata.Backplane.JsonSchema.Formats`) with an `:indeterminate_format` error.
   They are not ordinary schema mismatches and cannot be inverted or suppressed
   by subschema combinators.
 
@@ -66,6 +68,9 @@ defmodule Formata.Backplane.JsonSchema.Validator do
     end
   catch
     {Pattern, %Error{} = error} ->
+      {:error, [error]}
+
+    {Formata.Backplane.JsonSchema.Formats, %Error{} = error} ->
       {:error, [error]}
   end
 

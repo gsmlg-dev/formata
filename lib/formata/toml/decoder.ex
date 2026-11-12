@@ -237,7 +237,8 @@ defmodule Formata.Toml.Decoder do
   # - table
   # - key/value
   defp handle_token(lexer, original, doc, ?\[, skip, data, lines) do
-    case peek_skip(lexer, [:whitespace]) do
+    # The brackets of `[[` must be adjacent
+    case Lexer.peek(lexer) do
       {:error, _, _, _} = err ->
         err
 
@@ -252,17 +253,14 @@ defmodule Formata.Toml.Decoder do
     end
   end
 
+  # Keys; `true`/`false` are lexed as boolean tokens but are valid bare keys
   defp handle_token(lexer, original, doc, type, skip, data, lines)
-       when type in [:digits, :alpha, :string] do
+       when type in [:digits, :alpha, :string, true, false, ?-, ?_] do
     Lexer.push(lexer, {type, skip, data, lines})
 
     with {:ok, key, _skip, _lines} <- key(lexer) do
       handle_key(lexer, original, doc, key)
     end
-  end
-
-  defp handle_token(lexer, original, doc, type, skip, _data, lines) when type in ~c"-_" do
-    handle_token(lexer, original, doc, :string, skip, <<type::utf8>>, lines)
   end
 
   # We're done
@@ -278,7 +276,7 @@ defmodule Formata.Toml.Decoder do
   defp handle_key(lexer, original, doc, key) do
     with {:ok, {?=, _, _, _}} <- pop_skip(lexer, [:whitespace]),
          {:ok, value} <- value(lexer),
-         {:ok, doc} <- Builder.push_key(doc, key, value) do
+         {:ok, doc} <- Builder.push_key_value(doc, key, value) do
       # Make sure key/value pairs are separated by a newline
       case peek_skip(lexer, [:whitespace]) do
         {:error, _, _, _} = err ->
@@ -338,7 +336,7 @@ defmodule Formata.Toml.Decoder do
          {:ok, {?\[, _, _, _}} <- pop_skip(lexer, [:whitespace]),
          {:ok, key, _, _} <- key(lexer),
          {_, {:ok, {?\], _, _, _}}} <- {:close, pop_skip(lexer, [:whitespace])},
-         {_, {:ok, {?\], _, _, _}}} <- {:close, pop_skip(lexer, [:whitespace])},
+         {_, {:ok, {?\], _, _, _}}} <- {:close, Lexer.pop(lexer)},
          {:ok, doc} <- Builder.push_table_array(doc, key) do
       # Make sure table opening is followed by newline
       case peek_skip(lexer, [:whitespace]) do
@@ -384,14 +382,10 @@ defmodule Formata.Toml.Decoder do
               {:ok, :negative_infinity}
             end
 
+          # The sign of NaN carries no meaning; there is a single `:nan`
           {:ok, {:alpha, _, "nan", _}} ->
             Lexer.advance(lexer)
-
-            if type == ?\+ do
-              {:ok, :nan}
-            else
-              {:ok, :negative_nan}
-            end
+            {:ok, :nan}
 
           # Must be a signed integer or float
           {:ok, {:digits, _, d, _}} ->
@@ -614,7 +608,7 @@ defmodule Formata.Toml.Decoder do
          {:ok, {:digits, skip, <<_::utf8, _::utf8>> = dd, lines}} <- Lexer.pop(lexer) do
       # At this point we have a full date, check for time
       case Lexer.pop(lexer) do
-        {:ok, {:alpha, _, "T", _}} ->
+        {:ok, {:alpha, _, t, _}} when t in ["T", "t"] ->
           # Expecting a time
           with {:ok, time} <- time(lexer) do
             datetime(lexer, [dd, ?-, mm, ?-, yy], time)
@@ -672,30 +666,35 @@ defmodule Formata.Toml.Decoder do
     # Convert parts to string
     datestr = iodata_to_str(parts)
     # At this point we have at least YYYY-mm-dd and a fully decoded time
-    with {_, {:ok, date}} <- {:date, Date.from_iso8601(datestr)},
-         {_, {:ok, naive}} <- {:datetime, NaiveDateTime.new(date, time)} do
+    # `time` is already a valid ISO `Time`, so once the date is valid,
+    # `NaiveDateTime.new!/2` cannot fail.
+    with {_, {:ok, date}} <- {:date, Date.from_iso8601(datestr)} do
+      naive = NaiveDateTime.new!(date, time)
+
       # We just need to check for Z or UTC offset
       case Lexer.pop(lexer) do
-        {:ok, {:alpha, _, "Z", _}} ->
+        {:ok, {:alpha, _, z, _}} when z in ["Z", "z"] ->
           DateTime.from_naive(naive, "Etc/UTC")
 
         {:ok, {sign, _, _, _}} when sign in ~c"-+" ->
           # We have an offset
           with {:ok, {:digits, _, <<_::utf8, _::utf8>> = hh, _}} <- Lexer.pop(lexer),
                {:ok, {?:, _, _, _}} <- Lexer.pop(lexer),
-               {:ok, {:digits, _, <<_::utf8, _::utf8>> = mm, _}} <- Lexer.pop(lexer) do
+               {:ok, {:digits, oskip, <<_::utf8, _::utf8>> = mm, olines}} <- Lexer.pop(lexer),
+               hours = String.to_integer(hh),
+               mins = String.to_integer(mm),
+               {_, true, _} <- {:offset, hours <= 23 and mins <= 59, {hh, mm, oskip, olines}} do
             # Shift naive to account for offset
-            hours = String.to_integer(hh)
-            mins = String.to_integer(mm)
             offset = hours * 60 * 60 + mins * 60
 
+            # UTC = local time - offset, so `-07:00` adds and `+05:30` subtracts.
             naive =
               case sign do
                 ?- ->
-                  NaiveDateTime.add(naive, offset * -1, :second)
+                  NaiveDateTime.add(naive, offset, :second)
 
                 ?+ ->
-                  NaiveDateTime.add(naive, offset, :second)
+                  NaiveDateTime.add(naive, offset * -1, :second)
               end
 
             DateTime.from_naive(naive, "Etc/UTC")
@@ -705,12 +704,20 @@ defmodule Formata.Toml.Decoder do
 
             {:ok, {type, skip, data, lines}} ->
               {:error, {:invalid_datetime_offset, {type, data}}, skip, lines}
+
+            {:offset, false, {hh, mm, oskip, olines}} ->
+              # Hours must be 00-23 and minutes 00-59
+              {:error, {:invalid_datetime_offset, "#{hh}:#{mm}"}, oskip, olines}
           end
 
-        {:ok, {type, _, _, _} = token} when type in [:eof, :whitespace, :newline] ->
-          # Just a local date/time
+        {:ok, token} ->
+          # Just a local date/time; whatever follows (`,`, `]`, `}`, newline,
+          # ...) is validated by the caller.
           Lexer.push(lexer, token)
           {:ok, naive}
+
+        {:error, _, _, _} = err ->
+          err
       end
     else
       {:date, {:error, :invalid_date}} ->
@@ -718,18 +725,6 @@ defmodule Formata.Toml.Decoder do
 
       {:date, {:error, reason}} ->
         {:error, {:invalid_date, reason, datestr}, skip, lines}
-
-      {:datetime, {:error, :invalid_date}} ->
-        {:error, {:invalid_datetime, {datestr, time}}, skip, lines}
-
-      {:datetime, {:error, reason}} ->
-        {:error, {:invalid_date, reason, {datestr, time}}, skip, lines}
-
-      {:error, _, _, _} = err ->
-        err
-
-      {:ok, {type, skip, data, lines}} ->
-        {:error, {:invalid_token, {type, data}}, skip, lines}
     end
   end
 
@@ -850,7 +845,7 @@ defmodule Formata.Toml.Decoder do
     with {:ok, {type, _, _, _}} <- peek_skip(lexer, [:whitespace, :newline, :comment]),
          {_, false} <- {:trailing_comma, type == ?\]},
          {:ok, value} <- value(lexer),
-         {:ok, {next, _, _, _}} <- peek_skip(lexer, [:whitespace]) do
+         {:ok, {next, _, _, _}} <- peek_skip(lexer, [:whitespace, :newline, :comment]) do
       if next == ?, do
         Lexer.advance(lexer)
         accumulate_array_elements(lexer, [value | acc])
@@ -867,21 +862,30 @@ defmodule Formata.Toml.Decoder do
   end
 
   defp accumulate_table_elements(lexer) do
-    accumulate_table_elements(lexer, %{})
+    case peek_skip(lexer, [:whitespace]) do
+      {:ok, {?\}, _, _, _}} ->
+        {:ok, %{}}
+
+      {:ok, _} ->
+        accumulate_table_elements(lexer, %{}, %{})
+
+      {:error, _, _, _} = err ->
+        err
+    end
   end
 
-  defp accumulate_table_elements(lexer, acc) do
-    with {:ok, {type, _, _, _}} <- peek_skip(lexer, [:whitespace, :newline, :comment]),
-         {_, false} <- {:trailing_comma, type == ?\}},
-         {:ok, key, skip, lines} <- key(lexer),
-         {_, _, false, _, _} <- {:key_exists, key, Map.has_key?(acc, key), skip, lines},
-         {:ok, {?=, _, _, _}} <- pop_skip(lexer, [:whitespace, :comments]),
+  # Inline tables are single-line and allow no trailing comma, so every
+  # element (including the one after a comma) must be a key/value pair.
+  defp accumulate_table_elements(lexer, acc, defs) do
+    with {:ok, key, _skip, _lines} <- key(lexer),
+         {:ok, {?=, _, _, _}} <- pop_skip(lexer, [:whitespace]),
          {:ok, value} <- value(lexer),
+         {_, {:ok, defs}} <- {key, Builder.define_key_value(defs, [], key, value)},
          {_, {:ok, acc2}} <- {key, Builder.push_key_into_table(acc, key, value)},
-         {:ok, {next, _, _, _}} <- peek_skip(lexer, [:whitespace, :comments]) do
+         {:ok, {next, _, _, _}} <- peek_skip(lexer, [:whitespace]) do
       if next == ?, do
         Lexer.advance(lexer)
-        accumulate_table_elements(lexer, acc2)
+        accumulate_table_elements(lexer, acc2, defs)
       else
         {:ok, acc2}
       end
@@ -889,14 +893,8 @@ defmodule Formata.Toml.Decoder do
       {:error, _, _, _} = err ->
         err
 
-      {:key_exists, key, true, line, col} ->
-        {:error, {:key_exists, key}, line, col}
-
       {table, {:error, :key_exists}} ->
         {:error, {:key_exists_in_table, table}, -1, -1}
-
-      {:trailing_comma, true} ->
-        {:ok, acc}
 
       {:ok, {type, skip, data, lines} = token} ->
         Lexer.push(lexer, token)
@@ -905,35 +903,33 @@ defmodule Formata.Toml.Decoder do
   end
 
   defp key(lexer) do
-    result =
-      case pop_skip(lexer, [:whitespace]) do
-        {:error, _, _, _} = err ->
-          err
-
-        {:ok, {type, skip, s, lines}} when type in [:digits, :alpha, :string] ->
-          {key(lexer, s, []), skip, lines}
-
-        {:ok, {type, skip, _, lines}} when type in ~c"-_" ->
-          {key(lexer, <<type::utf8>>, []), skip, lines}
-
-        {:ok, {type, skip, data, lines} = token} ->
-          Lexer.push(lexer, token)
-          {:error, {:invalid_token, {type, data}}, skip, lines}
-      end
-
-    case result do
+    case pop_skip(lexer, [:whitespace]) do
       {:error, _, _, _} = err ->
         err
 
-      {{:ok, key}, skip, lines} ->
-        {:ok, key, skip, lines}
+      {:ok, {type, skip, data, lines} = token} ->
+        case key_part(token) do
+          {:ok, word, kind} ->
+            with {:ok, key} <- key(lexer, word, kind, []) do
+              {:ok, key, skip, lines}
+            end
 
-      {{:error, _, _, _} = err, _, _} ->
-        err
+          :error ->
+            Lexer.push(lexer, token)
+            {:error, {:invalid_token, {type, data}}, skip, lines}
+        end
     end
   end
 
-  defp key(lexer, word, acc) do
+  # A key part is either one quoted string or a run of adjacent bare-key
+  # tokens (`true`/`false` are lexed as booleans but are valid bare keys).
+  defp key_part({:string, _, s, _}), do: {:ok, s, :quoted}
+  defp key_part({type, _, s, _}) when type in [:digits, :alpha], do: {:ok, s, :bare}
+  defp key_part({type, _, _, _}) when is_boolean(type), do: {:ok, Atom.to_string(type), :bare}
+  defp key_part({type, _, _, _}) when type in ~c"-_", do: {:ok, <<type::utf8>>, :bare}
+  defp key_part(_token), do: :error
+
+  defp key(lexer, word, kind, acc) do
     case Lexer.peek(lexer) do
       {:error, _, _, _} = err ->
         err
@@ -943,52 +939,45 @@ defmodule Formata.Toml.Decoder do
         case peek_skip(lexer, [:whitespace]) do
           {:ok, {?., _, _, _}} ->
             Lexer.advance(lexer)
-
-            case peek_skip(lexer, [:whitespace]) do
-              {:error, _, _, _} = err ->
-                err
-
-              {:ok, {type, _, _, _}} when type in [:digits, :alpha, :string] ->
-                key(lexer, "", [word | acc])
-
-              {:ok, {type, _, _, _}} when type in ~c"-_" ->
-                key(lexer, "", [word | acc])
-
-              {:ok, {type, skip, data, lines}} ->
-                {:error, {:invalid_token, {type, data}}, skip, lines}
-            end
+            key_after_dot(lexer, [word | acc])
 
           {:ok, _} ->
             {:ok, Enum.reverse([word | acc])}
+
+          {:error, _, _, _} = err ->
+            err
         end
-
-      {:ok, {type, _, s, _}} when type in [:digits, :alpha, :string] ->
-        Lexer.advance(lexer)
-        key(lexer, word <> s, acc)
-
-      {:ok, {type, _, _, _}} when type in ~c"-_" ->
-        Lexer.advance(lexer)
-        key(lexer, word <> iodata_to_str([type]), acc)
 
       {:ok, {?., _, _, _}} ->
         Lexer.advance(lexer)
+        key_after_dot(lexer, [word | acc])
 
-        case peek_skip(lexer, [:whitespace]) do
-          {:error, _, _, _} = err ->
-            err
+      {:ok, {type, skip, data, lines} = token} ->
+        case {kind, key_part(token)} do
+          {:bare, {:ok, s, :bare}} ->
+            Lexer.advance(lexer)
+            key(lexer, word <> s, :bare, acc)
 
-          {:ok, {type, _, _, _}} when type in [:digits, :alpha, :string] ->
-            key(lexer, "", [word | acc])
-
-          {:ok, {type, _, _, _}} when type in ~c"-_" ->
-            key(lexer, "", [word | acc])
-
-          {:ok, {type, skip, data, lines}} ->
+          {_, {:ok, _, _}} ->
+            # A quoted part cannot be joined with anything (`a"b"`, `"a"b`)
             {:error, {:invalid_token, {type, data}}, skip, lines}
-        end
 
-      {:ok, _} ->
-        {:ok, Enum.reverse([word | acc])}
+          {_, :error} ->
+            {:ok, Enum.reverse([word | acc])}
+        end
+    end
+  end
+
+  defp key_after_dot(lexer, acc) do
+    case pop_skip(lexer, [:whitespace]) do
+      {:error, _, _, _} = err ->
+        err
+
+      {:ok, {type, skip, data, lines} = token} ->
+        case key_part(token) do
+          {:ok, word, kind} -> key(lexer, word, kind, acc)
+          :error -> {:error, {:invalid_token, {type, data}}, skip, lines}
+        end
     end
   end
 

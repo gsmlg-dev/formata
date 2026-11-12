@@ -43,7 +43,7 @@
     parse/1
   ]).
 
--define(TAG, "tag:formata_yamerl,2012:ipaddr").
+-define(TAG, "tag:yamerl,2012:ipaddr").
 
 %% -------------------------------------------------------------------
 %% Public API.

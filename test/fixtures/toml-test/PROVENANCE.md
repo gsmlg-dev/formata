@@ -3,11 +3,19 @@
 - Source: https://github.com/toml-lang/toml-test (formerly BurntSushi/toml-test)
 - Commit: `96fd088448ec0f4d9f061c730ed7854399c46faf`
   (2026-10-27, "Add more invalid dates and an invalid float case (#209)")
-- Files: every `valid/**/*.json` entry listed in the upstream
-  `tests/files-toml-1.0.0` manifest (208 tagged-JSON files, TOML 1.0.0 only;
-  TOML 1.1.0-only cases are excluded). Paths are preserved relative to
-  upstream `tests/`. The `.toml` inputs are not vendored; only the expected
-  tagged-JSON values are used, by `test/formata/codec/toml_conformance_test.exs`.
+- Files: every entry listed in the upstream `tests/files-toml-1.0.0` manifest
+  (925 files, TOML 1.0.0 only; TOML 1.1.0-only cases are excluded):
+  - `valid/**/*.toml` and `valid/**/*.json`: 208 valid inputs with their
+    tagged-JSON expectations;
+  - `invalid/**/*.toml`: 509 inputs every TOML 1.0.0 decoder must reject.
+
+  Paths are preserved relative to upstream `tests/`. They were taken from the
+  GitHub archive of that commit
+  (`https://codeload.github.com/toml-lang/toml-test/tar.gz/96fd088448ec0f4d9f061c730ed7854399c46faf`).
+  `test/formata/codec/toml_conformance_test.exs` uses them for the encoder
+  round-trip (tagged JSON) and decoder (`.toml` inputs) conformance tests.
+  Some inputs are intentionally malformed (invalid UTF-8, bare CR, control
+  characters, UTF-16 BOM) and must be kept byte-for-byte.
 - Files are unmodified copies.
 
 ## License

@@ -65,21 +65,21 @@ defmodule Formata.Toml.Lexer.String do
     {:ok, rest, {:string, skip + 1, bin, lines}}
   end
 
-  defp lex_literal(:multi, <<?\', ?\', ?\', rest::binary>>, skip, acc, lines) do
-    bin = acc |> Enum.reverse() |> IO.chardata_to_string()
-    {:ok, rest, {:multiline_string, skip + 3, bin, lines}}
-  end
+  # Up to two quotes may directly precede the closing delimiter
+  defp lex_literal(:multi, <<?\', ?\', ?\', ?\', ?\', rest::binary>>, skip, acc, lines),
+    do: multiline(rest, skip + 5, [?\', ?\' | acc], lines)
 
-  # Disallow any control chars in single quoted literals
-  defp lex_literal(:single, <<c::utf8, _::binary>>, skip, _acc, lines)
-       when (c >= 0 and c <= 31) or c == 127,
-       do: {:error, {:invalid_control_char, <<c::utf8>>}, skip + 1, lines}
+  defp lex_literal(:multi, <<?\', ?\', ?\', ?\', rest::binary>>, skip, acc, lines),
+    do: multiline(rest, skip + 4, [?\' | acc], lines)
 
-  # Disallow any control chars in single quoted literals, EXCEPT \t in multi-line literals
-  defp lex_literal(:multi, <<?\t, rest::binary>>, skip, acc, lines),
-    do: lex_literal(:multi, rest, skip + 1, [?\t | acc], lines)
+  defp lex_literal(:multi, <<?\', ?\', ?\', rest::binary>>, skip, acc, lines),
+    do: multiline(rest, skip + 3, acc, lines)
 
-  defp lex_literal(:multi, <<c::utf8, _::binary>>, skip, _acc, lines)
+  # Disallow any control chars in literals, EXCEPT \t
+  defp lex_literal(type, <<?\t, rest::binary>>, skip, acc, lines),
+    do: lex_literal(type, rest, skip + 1, [?\t | acc], lines)
+
+  defp lex_literal(_type, <<c::utf8, _::binary>>, skip, _acc, lines)
        when (c >= 0 and c <= 31) or c == 127,
        do: {:error, {:invalid_control_char, <<c::utf8>>}, skip + 1, lines}
 
@@ -107,20 +107,17 @@ defmodule Formata.Toml.Lexer.String do
   defp lex_quoted(type, <<?\n, rest::binary>>, skip, acc, lines),
     do: lex_quoted(type, rest, skip + 1, [?\n | acc], lines + 1)
 
-  # Allow escaping newlines in multi-ine strings
-  defp lex_quoted(:multi, <<?\\, ?\r, ?\n, rest::binary>>, skip, acc, lines) do
-    {rest, skip, lines} = trim_whitespace(rest, skip + 3, lines + 1)
-    lex_quoted(:multi, rest, skip, acc, lines)
-  end
+  # Line-ending backslash in multi-line strings: `\`, optional whitespace and
+  # a newline; all following whitespace and newlines are trimmed.
+  defp lex_quoted(:multi, <<?\\, c, rest::binary>>, skip, acc, lines)
+       when c in [?\s, ?\t, ?\r, ?\n] do
+    case skip_line_ending(<<c, rest::binary>>, skip + 1, lines, false) do
+      {:ok, rest, skip, lines} ->
+        lex_quoted(:multi, rest, skip, acc, lines)
 
-  defp lex_quoted(:multi, <<?\\, ?\n, rest::binary>>, skip, acc, lines) do
-    {rest, skip, lines} = trim_whitespace(rest, skip + 2, lines + 1)
-    lex_quoted(:multi, rest, skip, acc, lines)
-  end
-
-  # Trim trailing whitespace at end of line
-  defp lex_quoted(:multi, <<?\\, ?\s, rest::binary>>, skip, acc, lines) do
-    lex_quoted(:multi, <<?\\, rest::binary>>, skip, acc, lines)
+      :error ->
+        {:error, {:invalid_escape, <<?\\, c>>}, skip + 1, lines}
+    end
   end
 
   # Allowed escapes
@@ -130,10 +127,6 @@ defmodule Formata.Toml.Lexer.String do
 
   defp lex_quoted(type, <<?\\, ?b, rest::binary>>, skip, acc, lines) do
     lex_quoted(type, rest, skip + 2, [?\b | acc], lines)
-  end
-
-  defp lex_quoted(type, <<?\\, ?d, rest::binary>>, skip, acc, lines) do
-    lex_quoted(type, rest, skip + 2, [?\d | acc], lines)
   end
 
   defp lex_quoted(type, <<?\\, ?f, rest::binary>>, skip, acc, lines) do
@@ -176,16 +169,24 @@ defmodule Formata.Toml.Lexer.String do
     {:error, {:invalid_escape, <<?\\, char::utf8>>}, skip + 1, lines}
   end
 
-  # Closing quotes
-  defp lex_quoted(:multi, <<?\", ?\", ?\", rest::binary>>, skip, acc, lines) do
-    bin = acc |> Enum.reverse() |> IO.chardata_to_string()
-    {:ok, rest, {:multiline_string, skip + 3, bin, lines}}
-  end
+  # Closing quotes; up to two quotes may directly precede the delimiter
+  defp lex_quoted(:multi, <<?\", ?\", ?\", ?\", ?\", rest::binary>>, skip, acc, lines),
+    do: multiline(rest, skip + 5, [?\", ?\" | acc], lines)
+
+  defp lex_quoted(:multi, <<?\", ?\", ?\", ?\", rest::binary>>, skip, acc, lines),
+    do: multiline(rest, skip + 4, [?\" | acc], lines)
+
+  defp lex_quoted(:multi, <<?\", ?\", ?\", rest::binary>>, skip, acc, lines),
+    do: multiline(rest, skip + 3, acc, lines)
 
   defp lex_quoted(:single, <<?\", rest::binary>>, skip, acc, lines) do
     bin = acc |> Enum.reverse() |> IO.chardata_to_string()
     {:ok, rest, {:string, skip + 1, bin, lines}}
   end
+
+  # Tab is the only control character allowed unescaped
+  defp lex_quoted(type, <<?\t, rest::binary>>, skip, acc, lines),
+    do: lex_quoted(type, rest, skip + 1, [?\t | acc], lines)
 
   # Disallow any unescaped control chars in quoted strings
   defp lex_quoted(_type, <<c::utf8, _::binary>>, skip, _acc, lines)
@@ -200,95 +201,45 @@ defmodule Formata.Toml.Lexer.String do
   defp lex_quoted(_type, <<c, _::binary>>, skip, _acc, lines),
     do: {:error, {:invalid_unicode, <<c>>}, skip + 1, lines}
 
+  defp multiline(rest, skip, acc, lines) do
+    bin = acc |> Enum.reverse() |> IO.chardata_to_string()
+    {:ok, rest, {:multiline_string, skip, bin, lines}}
+  end
+
   defp trim_newline(<<?\r, ?\n, rest::binary>>, skip, lines), do: {rest, skip + 2, lines + 1}
   defp trim_newline(<<?\n, rest::binary>>, skip, lines), do: {rest, skip + 1, lines + 1}
   defp trim_newline(rest, skip, lines), do: {rest, skip, lines}
 
-  # Trims whitespace (tab, space) up until next non-whitespace character,
-  # or until closing delimiter. Only allowed with mulit-line quoted strings.
-  defp trim_whitespace(<<c::utf8, rest::binary>>, skip, lines) when is_whitespace(c),
-    do: trim_whitespace(rest, skip + 1, lines)
+  # Skips the whitespace and newlines after a line-ending backslash; at least
+  # one newline is required.
+  defp skip_line_ending(<<c, rest::binary>>, skip, lines, nl?) when is_whitespace(c),
+    do: skip_line_ending(rest, skip + 1, lines, nl?)
 
-  defp trim_whitespace(<<?\", ?\", ?\", _::binary>> = rest, skip, lines),
-    do: {rest, skip, lines}
+  defp skip_line_ending(<<?\r, ?\n, rest::binary>>, skip, lines, _nl?),
+    do: skip_line_ending(rest, skip + 2, lines + 1, true)
 
-  defp trim_whitespace(rest, skip, lines),
-    do: {rest, skip, lines}
+  defp skip_line_ending(<<?\n, rest::binary>>, skip, lines, _nl?),
+    do: skip_line_ending(rest, skip + 1, lines + 1, true)
 
-  def unescape_unicode(?U, <<n::8-binary, bin::binary>>) do
-    char =
-      case :erlang.binary_to_integer(n, 16) do
-        u when u <= 0x007F ->
-          <<u>>
+  defp skip_line_ending(rest, skip, lines, true), do: {:ok, rest, skip, lines}
+  defp skip_line_ending(_rest, _skip, _lines, false), do: :error
 
-        u when 0x0080 <= u and u <= 0x07FF ->
-          u1 = div(u, 64) + 192
-          u2 = mod(u, 64) + 128
-          <<u1, u2>>
+  def unescape_unicode(?U, <<n::8-binary, bin::binary>>), do: {codepoint!(n), bin, 8}
+  def unescape_unicode(?u, <<n::4-binary, bin::binary>>), do: {codepoint!(n), bin, 4}
+  def unescape_unicode(_type, bin), do: bad_unicode!(binary_part(bin, 0, min(byte_size(bin), 1)))
 
-        u when (0x0080 <= u and u <= 0xD7FF) or (0xE000 <= u and u <= 0xFFFF) ->
-          u1 = div(u, 4096) + 224
-          u2 = div(mod(u, 4096), 64) + 128
-          u3 = mod(u, 64) + 128
-          <<u1, u2, u3>>
-
-        u ->
-          u1 = div(u, 262_144) + 240
-          u2 = div(mod(u, 262_144), 4096) + 128
-          u3 = div(mod(u, 4096), 64) + 128
-          u4 = mod(u, 64) + 128
-          <<u1, u2, u3, u4>>
-      end
-
-    # Check that we have a valid utf8 encoding
-    case char do
-      <<_::utf8>> ->
-        {char, bin, 8}
-
-      _ ->
-        bad_unicode!(char)
+  # Escapes must be hex digits naming a Unicode scalar value
+  # (0..0xD7FF or 0xE000..0x10FFFF); surrogates are not allowed.
+  defp codepoint!(hex) do
+    with true <- hex =~ ~r/\A[0-9A-Fa-f]+\z/,
+         u = String.to_integer(hex, 16),
+         true <- u <= 0xD7FF or (u >= 0xE000 and u <= 0x10FFFF) do
+      <<u::utf8>>
+    else
+      _ -> bad_unicode!(hex)
     end
-  end
-
-  def unescape_unicode(?u, <<n::4-binary, bin::binary>>) do
-    case :erlang.binary_to_integer(n, 16) do
-      high when 0xD800 <= high and high <= 0xDBFF ->
-        # surrogate pair
-        case bin do
-          <<?\\, ?u, n2::4-binary, bin2::binary>> ->
-            case :erlang.binary_to_integer(n2, 16) do
-              low when 0xDC00 <= low and low <= 0xDFFF ->
-                <<u::utf16>> = <<high::16, low::16>>
-                {<<u::utf8>>, bin2, 4 + 6}
-
-              _ ->
-                bad_unicode!(n)
-            end
-
-          _ ->
-            bad_unicode!(n)
-        end
-
-      # second part of surrogate pair (without first part)
-      u when (0xDC00 <= u and u <= 0xDFFF) or u < 0 ->
-        bad_unicode!(n)
-
-      u ->
-        {<<u::utf8>>, bin, 4}
-    end
-  catch
-    :error, :badarg ->
-      bad_unicode!(n)
-  end
-
-  def unescape_unicode(_type, <<c, _::binary>>) do
-    bad_unicode!(<<c>>)
   end
 
   @spec bad_unicode!(binary) :: no_return
   defp bad_unicode!(byte), do: throw({:invalid_unicode, byte})
-
-  defp mod(x, y) when x > 0, do: rem(x, y)
-  defp mod(x, y) when x < 0, do: y + rem(x, y)
-  defp mod(0, _), do: 0
 end

@@ -41,7 +41,7 @@
     node_pres/1
   ]).
 
--define(TAG, "tag:formata_yamerl,2012:timestamp").
+-define(TAG, "tag:yamerl,2012:timestamp").
 
 -define(REGEX,
   "^(?:"

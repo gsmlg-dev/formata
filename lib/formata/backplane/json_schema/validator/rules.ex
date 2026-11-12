@@ -56,8 +56,20 @@ defmodule Formata.Backplane.JsonSchema.Validator.Rules do
     )
   end
 
-  def apply(%Rule{name: :format, params: format}, data, _ctx) do
-    Formata.Backplane.JsonSchema.Formats.validate(format, data)
+  def apply(%Rule{name: :format, params: format}, data, {path, _evaluated, _root}) do
+    case Formata.Backplane.JsonSchema.Formats.validate(format, data) do
+      {:indeterminate, context} ->
+        # Like an indeterminate pattern, this aborts validation at the public
+        # boundary: as an ordinary error, `not` or a combinator could turn it
+        # into a pass.
+        throw(
+          {Formata.Backplane.JsonSchema.Formats,
+           %Error{path: path, rule: :indeterminate_format, value: data, context: context}}
+        )
+
+      result ->
+        result
+    end
   end
 
   def apply(%Rule{name: :dynamicRef, params: ref}, data, ctx) do

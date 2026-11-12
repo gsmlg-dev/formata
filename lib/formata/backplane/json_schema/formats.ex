@@ -19,6 +19,13 @@ defmodule Formata.Backplane.JsonSchema.Formats do
 
   - Non-string data always passes format validation.
   - Unknown format values pass validation by default (per the JSON Schema specification).
+  - `hostname`, `idn-hostname`, `email` and `idn-email` inputs whose validity
+    depends on IDNA2008 (A-labels such as `xn--...`, or non-ASCII labels) are
+    indeterminate: `validate/2` returns `{:indeterminate, context}` and schema
+    validation aborts with an `:indeterminate_format` error, which subschema
+    combinators cannot invert or suppress. Such inputs are never accepted or
+    rejected as if they had been checked. Inputs that are invalid for another
+    reason (for example an invalid ASCII label) are still rejected.
   """
 
   alias Formata.Backplane.JsonSchema.Types.ErrorContext
@@ -27,6 +34,8 @@ defmodule Formata.Backplane.JsonSchema.Formats do
   Validates data against the specified format.
 
   Non-string data always passes. Unknown format values pass by default.
+  Returns `{:indeterminate, context}` when the input cannot be decided (see the
+  module documentation).
 
   ## Examples
 
@@ -43,6 +52,9 @@ defmodule Formata.Backplane.JsonSchema.Formats do
 
   def validate(format, data) when is_binary(data) do
     if valid?(format, data), do: :ok, else: {:error, %ErrorContext{contrast: format, input: data}}
+  catch
+    {__MODULE__, :indeterminate, reason} ->
+      {:indeterminate, %ErrorContext{contrast: format, input: data, error_detail: reason}}
   end
 
   def validate(_, _), do: :ok
