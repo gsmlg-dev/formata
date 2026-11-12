@@ -55,7 +55,14 @@ defmodule Formata.MixProject do
     [
       main: "readme",
       source_ref: "v#{@version}",
-      extras: ["README.md", "docs/design.md", "docs/release.md", "CHANGELOG.md", "NOTICE.md", "LICENSE"],
+      extras: [
+        "README.md",
+        "docs/design.md",
+        "docs/release.md",
+        "CHANGELOG.md",
+        "NOTICE.md",
+        "LICENSE"
+      ],
       groups_for_modules: [
         Codecs: [Formata.Codec, Formata.Codec.JSON, Formata.Codec.TOML, Formata.Codec.YAML],
         Schemas: [Formata.Schema, Formata.Schema.Native, Formata.Schema.JSONSchema],
