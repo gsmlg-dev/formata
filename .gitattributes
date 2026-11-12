@@ -1,0 +1,2 @@
+# Test fixtures are byte-exact conformance inputs (some must keep CRLF).
+test/fixtures/** -text
