@@ -28,7 +28,22 @@ mix hex.build --unpack -o /tmp/formata-unpacked
 # (mix deps.get must fetch nothing: Formata has no runtime dependencies)
 ```
 
-## Steps
+## Automated release
+
+The `Release` workflow (`.github/workflows/release.yml`, manual dispatch with
+`version` and `git_ref`) does steps 2–5 below: it sets `@version`, runs the
+gate, commits `chore(release): vX.Y.Z` and pushes it with the annotated tag,
+publishes to Hex with the `HEX_API_KEY` secret, and creates the GitHub release
+from the `CHANGELOG.md` entry plus generated notes. Add the changelog entry
+first; the workflow fails without it. Reruns are safe: an existing tag is only
+accepted on the exact commit being released, and an already published Hex
+version or existing GitHub release is skipped.
+
+```sh
+gh workflow run release.yml -f version=X.Y.Z -f git_ref=main
+```
+
+## Manual steps
 
 1. Update `@version` in `mix.exs` and the `CHANGELOG.md` entry.
 2. Run the gate.

@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.2.3)"
+        required: true
+        type: string
+      git_ref:
+        description: "Git ref to release from"
+        required: true
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+# A release is never cancelled midway: a half-finished publish is worse than a
+# queued one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release v${{ inputs.version }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+      GIT_REF: ${{ inputs.git_ref }}
+      TAG: v${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+          fetch-depth: 0
+
+      - name: Validate version
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$VERSION' is not a semantic version" >&2
+            exit 1
+          fi
+          if ! grep -qF "## [$VERSION]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [$VERSION]' entry" >&2
+            exit 1
+          fi
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.20.4"
+          otp-version: "28.5"
+      # python3 with tomllib runs the toml-test encoder cases.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set version in mix.exs
+        id: bump
+        run: |
+          sed -i -E "s/^(  @version \")[^\"]*(\")/\1${VERSION}\2/" mix.exs
+          grep -qF "@version \"$VERSION\"" mix.exs
+          if git diff --quiet mix.exs; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Existing tags and releases are never moved or overwritten; a rerun for
+      # an existing tag is only allowed from that exact commit.
+      - name: Check tag
+        id: tag
+        env:
+          CHANGED: ${{ steps.bump.outputs.changed }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            if [[ "$CHANGED" == "true" || "$(git rev-parse "$TAG^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+              echo "::error::tag $TAG already exists on another commit" >&2
+              exit 1
+            fi
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            if [[ "$CHANGED" == "true" ]] && ! git ls-remote --exit-code --heads origin "$GIT_REF" >/dev/null; then
+              echo "::error::the version bump must be committed to a branch; '$GIT_REF' is not one" >&2
+              exit 1
+            fi
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - run: mix deps.get
+      - run: mix format --check-formatted
+      - run: MIX_ENV=test mix compile --warnings-as-errors --force
+      - run: mix test
+      - run: mix docs
+      - run: mix hex.build
+
+      - name: Commit and tag
+        if: steps.tag.outputs.exists == 'false'
+        env:
+          CHANGED: ${{ steps.bump.outputs.changed }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ "$CHANGED" == "true" ]]; then
+            git commit -am "chore(release): v${VERSION}"
+            git push origin "HEAD:refs/heads/${GIT_REF}"
+          fi
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "refs/tags/$TAG"
+
+      - name: Publish to Hex.pm
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: |
+          if curl --silent --fail "https://hex.pm/api/packages/formata/releases/${VERSION}" >/dev/null; then
+            echo "formata ${VERSION} is already published"
+          else
+            mix hex.publish --yes
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub release $TAG already exists"
+            exit 0
+          fi
+          awk -v h="## [$VERSION]" '
+            index($0, h) == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          prerelease=()
+          [[ "$VERSION" == *-* ]] && prerelease=(--prerelease)
+          gh release create "$TAG" "formata-${VERSION}.tar" \
+            --verify-tag --title "$TAG" --notes-file notes.md --generate-notes "${prerelease[@]}"
