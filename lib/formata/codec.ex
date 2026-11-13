@@ -209,6 +209,68 @@ defmodule Formata.Codec do
   end
 
   @doc false
+  # Checks codec options against `specs`, a list of
+  # `{name, valid?, expected_description}`. Unknown options and invalid values
+  # are `:unsupported` / `:invalid_option` errors; every problem is reported.
+  @spec check_options(term, [{atom, (term -> boolean), String.t()}], keyword) ::
+          :ok | {:error, [Error.t(), ...]}
+  def check_options(opts, specs, fields) when is_list(opts) do
+    allowed = Enum.map(specs, &elem(&1, 0))
+
+    errors =
+      Enum.flat_map(opts, fn
+        {name, value} when is_atom(name) ->
+          case List.keyfind(specs, name, 0) do
+            nil ->
+              [
+                option_error(
+                  "unknown option #{inspect(name)}; supported options: #{inspect(allowed)}",
+                  name,
+                  value,
+                  allowed,
+                  fields
+                )
+              ]
+
+            {^name, valid?, expected} ->
+              if valid?.(value),
+                do: [],
+                else: [
+                  option_error(
+                    "invalid value #{inspect(value)} for option #{inspect(name)}; expected #{expected}",
+                    name,
+                    value,
+                    allowed,
+                    fields
+                  )
+                ]
+          end
+
+        other ->
+          [
+            option_error(
+              "options must be a keyword list, got element #{inspect(other)}",
+              nil,
+              other,
+              allowed,
+              fields
+            )
+          ]
+      end)
+
+    if errors == [], do: :ok, else: {:error, errors}
+  end
+
+  defp option_error(message, name, value, allowed, fields) do
+    Error.new(
+      :unsupported,
+      :invalid_option,
+      message,
+      Keyword.put(fields, :details, %{option: name, value: value, allowed: allowed})
+    )
+  end
+
+  @doc false
   # Computes 1-based line/column for a byte offset reported by a backend.
   @spec offset_location(binary, non_neg_integer) :: map
   def offset_location(input, offset) when is_binary(input) and is_integer(offset) do

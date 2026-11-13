@@ -13,7 +13,27 @@ defmodule Formata.Codec.JSON do
     * Syntax errors carry the byte offset reported by Formata.Jason and the line/column
       derived from it.
 
-  Options: none.
+  Options (both decode-only, independent, and `false` by default, so a plain
+  `decode/2` is strict RFC 8259):
+
+    * `:comments` - accept `//` line comments (to the end of the line) and
+      `/* ... */` block comments (non-nesting, must be closed) wherever JSON
+      allows whitespace. Comment-like text inside strings is string content.
+      Positions in errors refer to the original input.
+    * `:trailing_commas` - accept a single comma after the last element of a
+      non-empty array or object (`[1, 2,]`, `{"a": 1,}`). Empty slots such as
+      `[1,,2]`, `[,]`, `{,}`, or a doubled trailing comma are always rejected.
+
+  This is the "JSONC" mode; there is no separate JSONC codec. For a `.jsonc`
+  file use `Formata.decode(input, :json, comments: true, trailing_commas: true)`
+  (or only the extensions the file format allows). Comments are not preserved.
+  `#` comments and JSON5 syntax are not accepted; use `:json5` for JSON5.
+
+  Unknown options and non-boolean values are rejected with `:unsupported` /
+  `:invalid_option` errors.
+
+  For incremental parsing of a single document arriving in chunks, see
+  `Formata.Codec.JSON.Stream`.
 
   ## Encoding
 
@@ -38,7 +58,27 @@ defmodule Formata.Codec.JSON do
   def decode(input, opts \\ [])
 
   def decode(input, opts) when is_binary(input) and is_list(opts) do
-    case Formata.Jason.decode(input, objects: :ordered_objects) do
+    with :ok <- check_decode_options(opts) do
+      do_decode(input, opts)
+    end
+  end
+
+  @decode_options [
+    {:comments, &is_boolean/1, "a boolean"},
+    {:trailing_commas, &is_boolean/1, "a boolean"}
+  ]
+
+  defp check_decode_options(opts),
+    do: Formata.Codec.check_options(opts, @decode_options, backend: __MODULE__, format: :json)
+
+  defp do_decode(input, opts) do
+    jason_opts = [
+      objects: :ordered_objects,
+      comments: Keyword.get(opts, :comments, false),
+      trailing_commas: Keyword.get(opts, :trailing_commas, false)
+    ]
+
+    case Formata.Jason.decode(input, jason_opts) do
       {:ok, value} ->
         case unorder(value, []) do
           {:ok, data} -> {:ok, data}

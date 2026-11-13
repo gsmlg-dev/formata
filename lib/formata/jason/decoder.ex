@@ -46,7 +46,16 @@ defmodule Formata.Jason.Decoder do
   @key 2
   @object 3
 
-  defrecordp :decode, keys: nil, strings: nil, objects: nil, floats: nil
+  # Formata fork: `comments` and `trailing_commas` enable the opt-in JSONC-style
+  # extensions used by `Formata.Codec.JSON`. Both default to `false`, keeping the
+  # strict RFC 8259 grammar.
+  defrecordp :decode,
+    keys: nil,
+    strings: nil,
+    objects: nil,
+    floats: nil,
+    comments: false,
+    trailing_commas: false
 
   def parse(data, opts) when is_binary(data) do
     key_decode = key_decode_function(opts)
@@ -59,7 +68,9 @@ defmodule Formata.Jason.Decoder do
         keys: key_decode,
         strings: string_decode,
         objects: object_decode,
-        floats: float_decode
+        floats: float_decode,
+        comments: Map.get(opts, :comments, false) == true,
+        trailing_commas: Map.get(opts, :trailing_commas, false) == true
       )
 
     try do
@@ -109,6 +120,10 @@ defmodule Formata.Jason.Decoder do
     bytecase data do
       _ in ~c'\s\n\t\r', rest ->
         value(rest, original, skip + 1, stack, decode)
+
+      _ in ~c'/', rest ->
+        {rest, skip} = comment(rest, original, skip, decode)
+        value(rest, original, skip, stack, decode)
 
       _ in ~c'0', rest ->
         number_zero(rest, original, skip, stack, decode, 1)
@@ -331,6 +346,10 @@ defmodule Formata.Jason.Decoder do
       [@array, [] | stack] ->
         continue(rest, original, skip, stack, decode, [])
 
+      # Formata fork: `[1,]` - a non-empty accumulator means a comma came last.
+      [@array, [_ | _] = acc | stack] when decode(decode, :trailing_commas) ->
+        continue(rest, original, skip, stack, decode, :lists.reverse(acc))
+
       _ ->
         error(original, skip - 1)
     end
@@ -340,6 +359,10 @@ defmodule Formata.Jason.Decoder do
     bytecase data do
       _ in ~c'\s\n\t\r', rest ->
         array(rest, original, skip + 1, stack, decode, value)
+
+      _ in ~c'/', rest ->
+        {rest, skip} = comment(rest, original, skip, decode)
+        array(rest, original, skip, stack, decode, value)
 
       _ in ~c']', rest ->
         [acc | stack] = stack
@@ -369,6 +392,10 @@ defmodule Formata.Jason.Decoder do
       _ in ~c'\s\n\t\r', rest ->
         object(rest, original, skip + 1, stack, decode, value)
 
+      _ in ~c'/', rest ->
+        {rest, skip} = comment(rest, original, skip, decode)
+        object(rest, original, skip, stack, decode, value)
+
       _ in ~c'}', rest ->
         skip = skip + 1
         [key, acc | stack] = stack
@@ -397,11 +424,21 @@ defmodule Formata.Jason.Decoder do
       _ in ~c'\s\n\t\r', rest ->
         key(rest, original, skip + 1, stack, decode)
 
+      _ in ~c'/', rest ->
+        {rest, skip} = comment(rest, original, skip, decode)
+        key(rest, original, skip, stack, decode)
+
       _ in ~c'}', rest ->
         case stack do
           [[] | stack] ->
             decode(objects: object_decode) = decode
             continue(rest, original, skip + 1, stack, decode, object_decode.([]))
+
+          # Formata fork: `{"a": 1,}` - only reachable after a comma, so the
+          # accumulator is non-empty.
+          [[_ | _] = acc | stack] when decode(decode, :trailing_commas) ->
+            decode(objects: object_decode) = decode
+            continue(rest, original, skip + 1, stack, decode, object_decode.(acc))
 
           _ ->
             error(original, skip)
@@ -422,6 +459,10 @@ defmodule Formata.Jason.Decoder do
     bytecase data do
       _ in ~c'\s\n\t\r', rest ->
         key(rest, original, skip + 1, stack, decode, value)
+
+      _ in ~c'/', rest ->
+        {rest, skip} = comment(rest, original, skip, decode)
+        key(rest, original, skip, stack, decode, value)
 
       _ in ~c':', rest ->
         value(rest, original, skip + 1, [@object, value | stack], decode)
@@ -766,6 +807,46 @@ defmodule Formata.Jason.Decoder do
     error(original, skip + 6)
   end
 
+  # Formata fork: comments (`//` to end of line, non-nesting `/* */`), only
+  # where whitespace is allowed. `skip` is the offset of the leading `/`;
+  # returns the remaining input and the offset after the comment. Comment text
+  # must be valid UTF-8.
+  defp comment(rest, original, skip, decode) do
+    if decode(decode, :comments) do
+      case rest do
+        <<?/, rest::bits>> -> line_comment(rest, original, skip + 2)
+        <<?*, rest::bits>> -> block_comment(rest, original, skip + 2)
+        <<>> -> empty_error(original, skip + 1)
+        <<_::bits>> -> error(original, skip + 1)
+      end
+    else
+      error(original, skip)
+    end
+  end
+
+  defp line_comment(<<byte, _::bits>> = rest, _original, skip) when byte in ~c'\n\r',
+    do: {rest, skip}
+
+  defp line_comment(<<byte, rest::bits>>, original, skip) when byte < 0x80,
+    do: line_comment(rest, original, skip + 1)
+
+  defp line_comment(<<char::utf8, rest::bits>>, original, skip),
+    do: line_comment(rest, original, skip + byte_size(<<char::utf8>>))
+
+  defp line_comment(<<>>, _original, skip), do: {<<>>, skip}
+  defp line_comment(<<_::bits>>, original, skip), do: error(original, skip)
+
+  defp block_comment(<<?*, ?/, rest::bits>>, _original, skip), do: {rest, skip + 2}
+
+  defp block_comment(<<byte, rest::bits>>, original, skip) when byte < 0x80,
+    do: block_comment(rest, original, skip + 1)
+
+  defp block_comment(<<char::utf8, rest::bits>>, original, skip),
+    do: block_comment(rest, original, skip + byte_size(<<char::utf8>>))
+
+  defp block_comment(<<>>, original, skip), do: empty_error(original, skip)
+  defp block_comment(<<_::bits>>, original, skip), do: error(original, skip)
+
   defp error(<<_rest::bits>>, _original, skip, _stack, _decode) do
     throw({:position, skip - 1})
   end
@@ -807,6 +888,11 @@ defmodule Formata.Jason.Decoder do
   defp terminate(<<byte, rest::bits>>, original, skip, stack, decode, value)
        when byte in ~c'\s\n\r\t' do
     terminate(rest, original, skip + 1, stack, decode, value)
+  end
+
+  defp terminate(<<?/, rest::bits>>, original, skip, stack, decode, value) do
+    {rest, skip} = comment(rest, original, skip, decode)
+    terminate(rest, original, skip, stack, decode, value)
   end
 
   defp terminate(<<>>, _original, _skip, _stack, _decode, value) do

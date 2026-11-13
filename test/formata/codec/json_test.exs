@@ -51,6 +51,155 @@ defmodule Formata.Codec.JSONTest do
     end
   end
 
+  describe "decode options: comments and trailing_commas" do
+    @combos [
+      [],
+      [comments: true],
+      [trailing_commas: true],
+      [comments: true, trailing_commas: true]
+    ]
+
+    @strict_docs [
+      ~s({"a":[1,2.5,null,true],"b":{"c":"x"}}),
+      ~s( [ 1 , "two" , { } , [ ] ] ),
+      ~s("s"),
+      "-0.12e+34",
+      "null",
+      ~s({"url":"https://example.com/a//b","re":"/not-comment/","q":"\\"//\\""})
+    ]
+
+    test "strict JSON decodes identically under every option combination" do
+      for doc <- @strict_docs, opts <- @combos do
+        assert Formata.decode(doc, :json, opts) == Formata.decode(doc, :json),
+               "#{inspect(doc)} with #{inspect(opts)}"
+      end
+    end
+
+    test "each extension is accepted only when its own option is set" do
+      comment_doc = "// head\n{\"a\": /* inline */ 1} /* tail */"
+      comma_doc = ~s({"a": [1, 2,], "b": {"c": 3,},})
+
+      for opts <- @combos do
+        comments? = Keyword.get(opts, :comments, false)
+        commas? = Keyword.get(opts, :trailing_commas, false)
+
+        assert match?({:ok, %{"a" => 1}}, Formata.decode(comment_doc, :json, opts)) == comments?
+        assert match?({:ok, %{"a" => [1, 2]}}, Formata.decode(comma_doc, :json, opts)) == commas?
+      end
+    end
+
+    test "comment syntax" do
+      opts = [comments: true]
+
+      assert {:ok, [1, 2]} = Formata.decode("[1, // one\n 2 // two\n]", :json, opts)
+      assert {:ok, [1, 2]} = Formata.decode("[1, // one\r\n 2]\r\n", :json, opts)
+      assert {:ok, 1} = Formata.decode("1 // to EOF", :json, opts)
+      assert {:ok, 1} = Formata.decode("/* a\n multi-line\n block */ 1", :json, opts)
+      assert {:ok, 1} = Formata.decode("1/**/", :json, opts)
+      assert {:ok, 1} = Formata.decode("1 /* ** / */", :json, opts)
+      assert {:ok, %{"k" => "v"}} = Formata.decode(~s({/*a*/"k"/*b*/:/*c*/"v"/*d*/}), :json, opts)
+      assert {:ok, "é"} = Formata.decode(~s(/* é 😀 */ "é" // ü), :json, opts)
+
+      # Comment-like string content stays string content.
+      assert {:ok, %{"u" => "https://example.com/a//b", "b" => "/* x */"}} =
+               Formata.decode(~s({"u": "https://example.com/a//b", "b": "/* x */"}), :json, opts)
+
+      assert {:ok, ~s(a\\"//b)} = Formata.decode(~s("a\\\\\\"//b" // c), :json, opts)
+    end
+
+    test "invalid comments are rejected" do
+      opts = [comments: true]
+
+      for doc <- [
+            "/* unterminated",
+            "1 /* unterminated *",
+            "/* a /* nested */ */ 1",
+            "/ 1",
+            "1 /",
+            "# hash 1",
+            "[1/**/2]",
+            "tr/**/ue",
+            "-/**/1",
+            "1./**/5",
+            "\"a\" /* \xFF */"
+          ] do
+        assert {:error, [%Error{kind: :parse, code: :syntax}]} = Formata.decode(doc, :json, opts),
+               "expected #{inspect(doc)} to be rejected"
+      end
+    end
+
+    test "trailing comma syntax" do
+      opts = [trailing_commas: true]
+
+      assert {:ok, [1, 2]} = Formata.decode("[1, 2, ]", :json, opts)
+      assert {:ok, %{"x" => 1}} = Formata.decode(~s({ "x": 1, }), :json, opts)
+      assert {:ok, [[1], %{"a" => [2]}]} = Formata.decode(~s([[1,],{"a":[2,],},]), :json, opts)
+      assert {:ok, []} = Formata.decode("[]", :json, opts)
+      assert {:ok, %{}} = Formata.decode("{}", :json, opts)
+
+      for doc <- [
+            "[1,,2]",
+            "[,]",
+            "[,1]",
+            "{,}",
+            ~s({"x":1,,}),
+            "[1,,]",
+            ~s({"x":}),
+            ~s({"x",}),
+            "1,"
+          ] do
+        for opts <- @combos do
+          assert {:error, [%Error{code: :syntax}]} = Formata.decode(doc, :json, opts),
+                 "expected #{inspect(doc)} to be rejected with #{inspect(opts)}"
+        end
+      end
+    end
+
+    test "duplicate keys are still rejected, including escaped equivalents" do
+      opts = [comments: true, trailing_commas: true]
+
+      assert {:error, [%Error{code: :duplicate_key, path: ["o"], details: %{key: "a"}}]} =
+               Formata.decode(~s({"o": {"a": 1, /* c */ "\\u0061": 2,},}), :json, opts)
+    end
+
+    test "error locations refer to the original input" do
+      opts = [comments: true]
+      doc = "/* one\n two */ {\n  \"a\": // c\n  ]\n}"
+
+      assert {:error, [%Error{location: %{offset: 31, line: 4, column: 3}}]} =
+               Formata.decode(doc, :json, opts)
+
+      assert {:error, [%Error{location: %{offset: 13, line: 2, column: 9}}]} =
+               Formata.decode("[1]\r\n/* open\r", :json, opts)
+    end
+
+    test "invalid options fail predictably" do
+      assert {:error,
+              [%Error{kind: :unsupported, code: :invalid_option, details: %{option: :comments}}]} =
+               Formata.decode("1", :json, comments: :yes)
+
+      assert {:error,
+              [%Error{kind: :unsupported, code: :invalid_option, details: %{option: :json5}}]} =
+               Formata.decode("1", :json, json5: true)
+
+      assert {:error, [%Error{code: :invalid_option}]} =
+               Formata.convert("1", :json, :json, decode: [trailing_commas: "yes"])
+    end
+
+    test "encoding stays strict JSON" do
+      {:ok, data} =
+        Formata.decode(~s({"a": [1,], /* c */ "b": "//"}), :json,
+          comments: true,
+          trailing_commas: true
+        )
+
+      assert {:ok, json} = Formata.encode(data, :json)
+      assert {:ok, ^data} = Formata.decode(json, :json)
+      refute json =~ ",]"
+      refute json =~ "/*"
+    end
+  end
+
   describe "encode" do
     test "encodes the JSON domain" do
       assert {:ok, json} = Formata.encode(%{"a" => [1, 2.5, nil, true, "é"]}, :json)

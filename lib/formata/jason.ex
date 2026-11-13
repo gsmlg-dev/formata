@@ -19,7 +19,12 @@ defmodule Formata.Jason do
   @type objects :: :maps | :ordered_objects
 
   @type decode_opt ::
-          {:keys, keys} | {:strings, strings} | {:floats, floats} | {:objects, objects}
+          {:keys, keys}
+          | {:strings, strings}
+          | {:floats, floats}
+          | {:objects, objects}
+          | {:comments, boolean}
+          | {:trailing_commas, boolean}
 
   @doc """
   Parses a JSON value from `input` iodata.
@@ -50,6 +55,13 @@ defmodule Formata.Jason do
 
       * `:maps` (default) - objects are decoded as maps
       * `:ordered_objects` - objects are decoded as `Formata.Jason.OrderedObject` structs
+
+    * `:comments` - Formata fork: when `true`, accept `//` line comments and
+      non-nesting `/* */` block comments wherever whitespace is allowed
+      (default `false`).
+
+    * `:trailing_commas` - Formata fork: when `true`, accept one comma after
+      the last element of a non-empty array or object (default `false`).
 
   ## Decoding keys to atoms
 
@@ -238,6 +250,13 @@ defmodule Formata.Jason do
   end
 
   defp format_decode_opts(opts) do
-    Enum.into(opts, %{keys: :strings, strings: :reference, floats: :native, objects: :maps})
+    Enum.into(opts, %{
+      keys: :strings,
+      strings: :reference,
+      floats: :native,
+      objects: :maps,
+      comments: false,
+      trailing_commas: false
+    })
   end
 end
