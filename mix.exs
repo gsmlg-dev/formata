@@ -59,7 +59,14 @@ defmodule Formata.MixProject do
         "LICENSE"
       ],
       groups_for_modules: [
-        Codecs: [Formata.Codec, Formata.Codec.JSON, Formata.Codec.TOML, Formata.Codec.YAML],
+        Codecs: [
+          Formata.Codec,
+          Formata.Codec.JSON,
+          Formata.Codec.JSON.Stream,
+          Formata.Codec.JSON5,
+          Formata.Codec.TOML,
+          Formata.Codec.YAML
+        ],
         Schemas: [
           Formata.Schema,
           Formata.Schema.Native,

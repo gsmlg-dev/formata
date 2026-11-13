@@ -11,7 +11,9 @@ umbrella, schema AST, schema inference, or schema conversion.
 | --- | --- |
 | `Formata` | Public entry points: `decode/3`, `encode/3`, `convert/4`, `validate/3`, `cast/3` |
 | `Formata.Codec` | Codec behaviour, format lookup, shared value-domain checks |
-| `Formata.Codec.JSON` / `.TOML` / `.YAML` | Format adapters |
+| `Formata.Codec.JSON` / `.JSON5` / `.TOML` / `.YAML` | Format adapters |
+| `Formata.Codec.JSON.Stream` | Incremental single-document JSON parser (events) |
+| `Formata.Codec.JSON5` parser (internal `JSON5.Parser`) | JSON5 1.0.0 parser |
 | `Formata.Codec.TOML.Encoder` | Focused TOML 1.0.0 encoder |
 | `Formata.Schema` | `compile/3`, `check/3`, compiled-schema struct |
 | `Formata.Schema.Native` | `Formata.Backplane.Schema` adapter, pure-validation preflight, casting |
@@ -143,6 +145,111 @@ tests) and are not part of the public API.
   node tree. `Formata.Ymlr` leaves some strings unquoted that read back as numbers
   (for example `".5"`), so YAML output is decoded and compared before it is
   returned.
+* JSON decode options (`comments`, `trailing_commas`): see "JSON extensions"
+  below.
 * Special floats use the atoms produced by `Formata.Toml`
   (`:infinity`, `:negative_infinity`, `:nan`); YAML's `:"+inf"`/`:"-inf"` are
   normalized to them and converted back for `Formata.Ymlr`.
+
+### JSON extensions (comments, trailing commas)
+
+* The extensions live in the `Formata.Jason` decoder, not in a pre-pass. A
+  `/` clause was added to every bytecase position that accepts whitespace
+  (`value`, `array`, `object`, `key`, `terminate`); it consumes a `//` or
+  `/* */` comment when `comments` is set and is an error otherwise. Comments
+  therefore cannot appear inside strings, numbers, or literals, and byte
+  offsets in errors stay those of the original input. Comment text must be
+  valid UTF-8; block comments do not nest.
+* Trailing commas reuse the decoder's stacks: after a comma the array/object
+  accumulator is non-empty, so `]`/`}` in value/key position closes the
+  container only when the accumulator is non-empty and `trailing_commas` is
+  set. Empty slots never reach that state and stay errors.
+* With both options `false` (the default) the decoder takes exactly the
+  previous paths; the new clauses only replace the generic error clause for
+  `/`.
+* The `:json` codec's `decode/2` used to ignore its options. It now validates
+  them (`:unsupported` / `:invalid_option`), so callers that passed unknown
+  options (also through `convert/4`'s `:decode`) get an error.
+* There is no `:jsonc` codec: JSONC is a parsing mode of `:json`, and
+  encoding is always strict JSON.
+
+### Incremental JSON parser
+
+`Formata.Codec.JSON.Stream` is a separate state machine
+(the internal `Stream.Machine` module). The one-shot `Formata.Jason` decoder
+was not reused: it is a recursive parse over one binary with no resumable
+state, and making it resumable would slow the common path. Agreement is
+enforced by differential tests instead (every two-way split, byte-by-byte
+and random chunkings, strict and extended inputs).
+
+* State: an immutable struct with the container stack (`{:array, index}`,
+  `{:object, seen_keys, current_key}`), the grammar mode (expect
+  value/key/colon/after-value/done), the token in progress (string, number,
+  or comment, with its pieces), and the absolute offset/line/column of the
+  next byte.
+* Each `feed/2` scans `carry <> chunk` once. Indivisible units that are cut
+  by the chunk end are not consumed but carried: a partial UTF-8 character
+  (≤ 3 bytes), a `\uXXXX` escape or surrogate pair (≤ 11 bytes), a literal
+  prefix (≤ 4 bytes), `/`, or the `*` of `*/`. Strings and numbers keep their
+  pieces in the token; pieces are copied out of the chunk at the end of the
+  feed (`:binary.copy/1`) so the state never keeps a chunk alive.
+* Valid prefixes wait, invalid prefixes fail immediately: `tru`, `1e+`,
+  `"\u00`, or a UTF-8 lead byte wait, while `trx`, `{"a" 1`, or an overlong
+  UTF-8 lead (`E0 80`) fail at once. Numbers are emitted only when a byte
+  that cannot continue them arrives, or at `finish/1`.
+* Events are paths plus values, never partial values; `string_deltas`
+  adds preview fragments for string values that contain only complete
+  characters and escapes.
+* Duplicate keys are detected per object from the set of keys seen so far,
+  so memory grows with the number of keys of open objects as well as the
+  depth.
+* Limits (`max_depth` 1024, `max_document_bytes` 64 MiB, `max_token_bytes`
+  8 MiB) return `:parse` / `:limit_exceeded` errors. The 1024-digit integer
+  limit of `Formata.Jason` also applies.
+* Error codes: `:syntax`, `:incomplete` (input ended early; reported by
+  `finish/1`), `:duplicate_key`, `:limit_exceeded`. Acceptance always
+  matches `Formata.decode/3`; codes and some offsets can differ because the
+  stream reports the first problem in input order (for example a duplicate
+  key before a later syntax error).
+* `decode_stream/2` is a `Stream.resource/3` that pulls one chunk at a time
+  through a suspended `Enumerable.reduce/3`, so the upstream is read only on
+  demand and is halted after an error or when the consumer stops.
+
+Measured cost (`MIX_ENV=test mix run bench/json_stream.exs`, Elixir 1.20.4 /
+OTP 28, Apple M1 Max; median of five repetitions per row):
+
+| Input | Chunks | Time |
+| --- | ---: | ---: |
+| 406 KB document, `Formata.decode/3` | 1 | 6.3 ms |
+| same, stream, whole document | 1 | 50 ms |
+| same, stream, 4096-byte chunks | 100 | 49 ms |
+| same, stream, 256-byte chunks | 1,587 | 22 ms |
+| same, stream, 16-byte chunks | 25,379 | 29 ms |
+| same, stream, 1-byte chunks | 406,052 | 168 ms |
+| 20 KB document, stream, 16-byte chunks | 1,243 | 1.5 ms |
+| 20 KB document, re-decode the buffer after each chunk | 1,243 | 152 ms |
+
+The stream's cost does not depend on the number of chunks beyond a constant
+per-feed overhead, while re-decoding the accumulated buffer grows
+quadratically. The stream is several times slower than the one-shot decoder
+on the same bytes; it is meant for input that arrives incrementally.
+
+### JSON5
+
+* `Formata.Codec.JSON5` has its own recursive-descent parser. The JSON
+  decoder was not extended with JSON5 switches, so JSON5 semantics (quotes,
+  identifiers, hexadecimal, `Infinity`/`NaN`) cannot leak into `:json`. No
+  regular-expression rewriting into JSON is used; the only regular
+  expressions classify a single non-ASCII code point by Unicode general
+  category for `IdentifierName`.
+* Special values map to `:infinity`, `:negative_infinity`, and `:nan`, the
+  atoms already used by TOML and YAML. The encoder accepts them in addition
+  to the JSON domain and writes `Infinity`, `-Infinity`, `NaN`.
+* Converting to `:json` keeps the JSON encoder's rule: non-finite numbers are
+  `:unrepresentable` at their path unless a transform (for example
+  `:special_floats_to_strings`) is requested. JSON Schema validation rejects
+  them as `:non_json_value`.
+* `:json5` takes no decode options; `comments`/`trailing_commas` are
+  rejected because JSON5 always allows both.
+* Finite literals outside the float range are errors, not `Infinity`;
+  underflow to `0.0` follows `:erlang.binary_to_float/1`, as in `:json`.

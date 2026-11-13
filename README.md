@@ -2,7 +2,9 @@
 
 Composable data codecs, schemas, and validation for Elixir.
 
-Formata decodes and encodes **JSON**, **TOML**, and **YAML**, validates data
+Formata decodes and encodes **JSON** (with opt-in comments and trailing
+commas, and an incremental parser for streamed output), **JSON5**, **TOML**,
+and **YAML**, validates data
 against **native schemas** (`Formata.Backplane.Schema`) or **JSON Schema** documents
 (Draft 7 and Draft 2020-12, via `Formata.Backplane.JsonSchema`), and keeps every
 lossy step explicit.
@@ -99,7 +101,7 @@ iex> Formata.convert(~s({"name": "api", "debug": null}), :json, :toml, transform
 | `Formata.cast(data, schema, opts \\ [])` | `{:ok, data}` |
 | `Formata.Transform.*` | `{:ok, data}` |
 
-`format` is `:json`, `:toml`, `:yaml`, or a module implementing
+`format` is `:json`, `:json5`, `:toml`, `:yaml`, or a module implementing
 `Formata.Codec`. `kind` is `:native` or `:json_schema`
 (`Formata.Schema.native/2` and `Formata.Schema.json_schema/2` are shortcuts).
 
@@ -188,27 +190,104 @@ JSON Schema returns `:unsupported`.
 JSON Schema documents control their own additional properties; there is no
 facade option to override `additionalProperties` or `unevaluatedProperties`.
 
+## JSON, JSONC-style options, JSON5, and streaming
+
+`:json` is strict RFC 8259 by default. Two independent decode options accept
+the common extensions of configuration files ("JSONC"); there is no separate
+JSONC codec:
+
+```elixir
+iex> Formata.decode(~s({"a": [1, 2,],}), :json)
+...> |> then(fn {:error, [error]} -> error.code end)
+:syntax
+iex> Formata.decode(~s({"a": [1, 2,],}), :json, trailing_commas: true)
+{:ok, %{"a" => [1, 2]}}
+iex> Formata.decode("// settings\n{\"url\": \"https://x.dev//a\" /* note */}", :json, comments: true)
+{:ok, %{"url" => "https://x.dev//a"}}
+```
+
+`comments: true` accepts `//` and `/* */` comments where whitespace is
+allowed; `trailing_commas: true` accepts one comma after the last element.
+Neither implies the other, and empty slots (`[1,,2]`, `{,}`) are always
+errors. Encoding to `:json` always produces strict JSON. Unknown or invalid
+options are `:invalid_option` errors. For a `.jsonc` file, pass
+`comments: true, trailing_commas: true` (or only what the file format allows).
+
+`:json5` is a separate codec for [JSON5 1.0.0](https://spec.json5.org/):
+
+```elixir
+iex> Formata.decode("{name: 'Ada', id: 0x2A, ratio: .5, max: Infinity,}", :json5)
+{:ok, %{"name" => "Ada", "id" => 42, "ratio" => 0.5, "max" => :infinity}}
+iex> Formata.encode(%{"max" => :infinity}, :json5)
+{:ok, ~s({"max":Infinity})}
+iex> {:error, [%Formata.Error{kind: :encode, code: :unrepresentable, path: ["max"]}]} =
+...>   Formata.convert("{max: Infinity}", :json5, :json)
+```
+
+`Formata.Codec.JSON.Stream` parses **one** JSON document that arrives in
+chunks cut at arbitrary bytes, for example an LLM's streamed tool arguments.
+It emits structure, key, and complete scalar events as soon as they are
+known, and it never re-parses earlier input:
+
+```elixir
+iex> alias Formata.Codec.JSON.Stream, as: JSONStream
+iex> {:ok, parser} = JSONStream.new()
+iex> {:ok, events, parser} = JSONStream.feed(parser, ~s({"city": "Par))
+iex> events
+[{:start_object, []}, {:key, ["city"], "city"}]
+iex> {:ok, events, parser} = JSONStream.feed(parser, ~s(is", "days": 3))
+iex> events
+[{:value, ["city"], "Paris"}, {:key, ["days"], "days"}]
+iex> {:error, [%Formata.Error{code: :incomplete}]} = JSONStream.finish(parser)
+iex> {:ok, events, parser} = JSONStream.feed(parser, "}")
+iex> events
+[{:value, ["days"], 3}, {:end_object, []}]
+iex> JSONStream.finish(parser)
+{:ok, []}
+```
+
+Events are provisional: only a successful `finish/1` means the document is
+complete and valid. Do not run side effects (such as a tool call) from
+partial events; wait for `finish/1`, then validate the data. `decode_stream/2`
+wraps the parser as a lazy stream of `{:ok, event}` items that ends with
+`{:error, errors}` on failure. See `Formata.Codec.JSON.Stream` for options
+(`string_deltas`, resource limits) and the memory model.
+
+JSON Lines (NDJSON) are a sequence of independent documents, not one document
+in chunks. Formata has no JSON Lines codec; decode each line:
+
+```elixir
+File.stream!("events.jsonl")
+|> Stream.map(&String.trim_trailing(&1, "\n"))
+|> Stream.map(&String.trim_trailing(&1, "\r"))
+|> Stream.reject(&(&1 == ""))
+|> Stream.map(&Formata.decode(&1, :json))
+```
+
+Whether blank lines are allowed and how line numbers are reported is up to
+the caller (`Stream.with_index/2`).
+
 ## Codecs and value domains
 
 Decoded data uses ordinary Elixir terms. Document keys stay strings and
 Formata never creates atoms from document content. An absent field is absent
 from the map; an explicit null is `nil`.
 
-| Value | Elixir | JSON | TOML | YAML |
-| --- | --- | --- | --- | --- |
-| null | `nil` | yes | no (rejected) | yes |
-| boolean, integer, string | as is | yes | yes (64-bit integers) | yes |
-| finite float | float | yes | yes | yes |
-| ±infinity, NaN | `:infinity`, `:negative_infinity`, `:nan` | no | yes | yes |
-| list | list | yes | yes (arrays, arrays of tables) | yes |
-| map | string keys | yes | yes (tables) | yes (also integer/boolean keys) |
-| date / time / local date-time / offset date-time | `Date`, `Time`, `NaiveDateTime`, `DateTime` | no | yes | no (decode as strings) |
-| scalar root | | yes | no (root must be a table) | yes |
+| Value | Elixir | JSON | JSON5 | TOML | YAML |
+| --- | --- | --- | --- | --- | --- |
+| null | `nil` | yes | yes | no (rejected) | yes |
+| boolean, integer, string | as is | yes | yes | yes (64-bit integers) | yes |
+| finite float | float | yes | yes | yes | yes |
+| ±infinity, NaN | `:infinity`, `:negative_infinity`, `:nan` | no | yes | yes | yes |
+| list | list | yes | yes | yes (arrays, arrays of tables) | yes |
+| map | string keys | yes | yes | yes (tables) | yes (also integer/boolean keys) |
+| date / time / local date-time / offset date-time | `Date`, `Time`, `NaiveDateTime`, `DateTime` | no | no | yes | no (decode as strings) |
+| scalar root | | yes | yes | no (root must be a table) | yes |
 
 Policies:
 
-* **Duplicate keys** are rejected by all three decoders (`:duplicate_key`, or
-  the TOML decoder's syntax error).
+* **Duplicate keys** are rejected by every decoder, compared after unescaping
+  (`:duplicate_key`, or the TOML decoder's syntax error).
 * **YAML** is single-document: multiple documents are rejected
   (`:multiple_documents`); an empty stream decodes to `nil`. Merge keys (`<<`)
   are rejected. Anchors/aliases are expanded. Comments, formatting, anchors,
@@ -259,6 +338,14 @@ iex> Exception.message(error)
   exclusive.
 * Unknown-field rejection is not available for native keyword-list schemas.
 * YAML timestamps decode as strings; YAML encoding rejects date/time values.
+* JSON5: the sign of `NaN` is not kept, and the integer `-0` decodes as `0`
+  (`-0.0` stays a negative-zero float). Unpaired `\u` surrogate escapes are
+  rejected because Elixir strings are UTF-8. Identifier characters are
+  classified with the Unicode tables of the runtime's PCRE library.
+* `Formata.Codec.JSON.Stream` handles one JSON document (no JSON5, no JSON
+  Lines). Its error columns count Unicode code points, while `Formata.decode/3`
+  counts graphemes; byte offsets are the same. In a single large chunk it is
+  several times slower than `Formata.decode/3` (see `docs/design.md`).
 * With `format_assertion: true`, `hostname`, `email`, `idn-hostname`, and
   `idn-email` values that contain an A-label (`xn--...`) or a non-ASCII label
   cannot be checked without the IDNA2008 tables. Validation returns a single

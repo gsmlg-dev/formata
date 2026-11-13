@@ -37,10 +37,21 @@ the Hex package.
 
 Bug fixes made in Formata after forking are listed in `CHANGELOG.md`.
 
+## Formata additions to forked code
+
+- `Formata.Jason` decoder: opt-in `comments` and `trailing_commas` decode
+  options (default `false`), used by `Formata.Codec.JSON`.
+
 ## Original implementation
 
 `Formata.Codec.TOML.Encoder` is an original implementation written against the
 [TOML 1.0.0 specification](https://toml.io/en/v1.0.0).
+
+`Formata.Codec.JSON.Stream` (written against
+[RFC 8259](https://www.rfc-editor.org/rfc/rfc8259)) and `Formata.Codec.JSON5`
+(written against the [JSON5 1.0.0 specification](https://spec.json5.org/))
+are original implementations; their test fixtures are written from those
+specifications.
 
 ## Test fixtures
 

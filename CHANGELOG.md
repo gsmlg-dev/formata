@@ -6,6 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `:json` decode options `comments: true` (`//` and `/* */` comments where
+  whitespace is allowed) and `trailing_commas: true` (one comma after the
+  last element of an array or object). They are independent and default to
+  `false`; `:json` stays strict RFC 8259 and encoding always produces strict
+  JSON. There is no separate JSONC codec.
+- `Formata.Codec.JSON.Stream`: an incremental, purely functional parser for a
+  single JSON document received in arbitrary byte chunks (for example LLM
+  output), with `new/1`, `feed/2`, `finish/1`, and the lazy
+  `decode_stream/2`. It emits structure, key, and complete scalar events (and
+  optional string deltas), checks completeness at `finish/1`, rejects
+  duplicate keys, reports positions across chunks, and enforces depth,
+  document, and token size limits.
+- `:json5` codec (`Formata.Codec.JSON5`) for JSON5 1.0.0, with special
+  numbers mapped to `:infinity`, `:negative_infinity`, and `:nan`.
+- `bench/json_stream.exs` measures the stream parser by chunk size.
+
+### Changed
+
+- `Formata.decode(input, :json, opts)` now rejects unknown options and
+  invalid option values with `:unsupported` / `:invalid_option` errors;
+  previously all options were ignored.
+- `Formata.Jason` decoder (fork): opt-in `comments` and `trailing_commas`
+  options.
+
 ## [0.1.0]
 
 ### Added
