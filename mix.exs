@@ -1,7 +1,7 @@
 defmodule Formata.MixProject do
   use Mix.Project
 
-  @version "0.3.1"
+  @version "0.3.2"
   @source_url "https://github.com/gsmlg-dev/formata"
 
   def project do
