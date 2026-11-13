@@ -40,6 +40,11 @@ jobs:
             _build
           key: mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
       - run: mix deps.get
+      - name: Compile Erlang sources with warnings as errors
+        run: |
+          erlang_build_dir=$(mktemp -d)
+          trap 'rm -r "$erlang_build_dir"' EXIT
+          erlc -Werror +warn_deprecated_catch -I include -o "$erlang_build_dir" src/*.erl
       - run: mix format --check-formatted
         if: matrix.lint
       - run: mix compile --warnings-as-errors --force

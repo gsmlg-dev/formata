@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-14
+
+### Fixed
+
+- Replace three deprecated Erlang catch expressions in the YAML binary
+  constructor and constructor-module probe. Invalid Base64 still returns
+  `not_a_binary` with its token and location, including missing padding;
+  module probing still attempts loading before checking exports.
+
+### Added
+
+- Clean Erlang compilation gates in CI and Release with warnings treated
+  as errors and `warn_deprecated_catch` explicitly enabled on OTP 28.
+- Regression coverage for Base64 constructor modes and constructor-module
+  probing, including available but unloaded modules.
+
 ## [0.3.2] - 2026-11-14
 
 ### Fixed

@@ -16,6 +16,11 @@ All of these must pass on the commit to release:
 ```sh
 mix deps.get
 mix format --check-formatted
+(
+  erlang_build_dir=$(mktemp -d)
+  trap 'rm -r "$erlang_build_dir"' EXIT
+  erlc -Werror +warn_deprecated_catch -I include -o "$erlang_build_dir" src/*.erl
+)
 mix compile --warnings-as-errors --force
 mix test
 mix docs
@@ -26,6 +31,13 @@ mix hex.build
 (`test/formata/vendor/`), the TOML 1.0.0 `toml-test` suite, and the required
 JSON-Schema-Test-Suite cases for Draft 7 and Draft 2020-12. Run it on the
 oldest supported Elixir (1.18) as well; CI does.
+
+The separate `erlc` gate compiles every shipped Erlang runtime source into
+a fresh temporary directory, so cached BEAM files cannot skip it. `-Werror`
+treats Erlang warnings as errors; `+warn_deprecated_catch` enables the OTP 28
+opt-in warning that OTP 29 enables by default. CI retains both supported
+Elixir versions and runs this gate on each, as does the release workflow.
+Run the same command from an unpacked package to check consumer sources.
 
 Also smoke-test the built package from an isolated consumer:
 
