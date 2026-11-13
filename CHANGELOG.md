@@ -8,9 +8,26 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `Formata.Codec.JSON.Stream` is faster, with the same API, events, and
+  errors. Measured on Elixir 1.20 / OTP 28 (method and full results in
+  `docs/design.md`): 2.0–3.7× on compact documents fed in 1-byte, 1–256-byte,
+  4 KiB, or 64 KiB chunks and on long strings; 1.65–2.0× on 1–16-byte token
+  deltas; 1.4–1.8× on pretty-printed documents; 1.7× for a whole document in
+  a single chunk; 1.7–6× less allocation. Position tracking no longer
+  re-scans every chunk with a per-byte loop; the scanner reuses binary match
+  contexts, keeps per-token state in a small record, caches container paths,
+  and scans unescaped ASCII eight bytes at a time.
+- `bench/json_stream.exs` covers token deltas, network chunks, long and
+  escaped strings, deep nesting, pretty-printed documents, `string_deltas`,
+  `decode_stream/2`, and OTP's `:json` incremental decoder for comparison.
 - Supported versions are documented as Elixir 1.18+ on Erlang/OTP 28+
   (previously OTP 25+), and CI now tests the minimum combination, Elixir 1.18
   on OTP 28, instead of OTP 27.
+
+### Fixed
+
+- `Formata.Codec.JSON.Stream` copied the rest of the chunk for every number
+  it finished, making large chunks with many numbers quadratic.
 
 ## [0.2.0] - 2026-11-13
 

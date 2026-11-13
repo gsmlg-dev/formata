@@ -105,12 +105,19 @@ defmodule Formata.Codec.JSON.Stream do
 
   ## Memory and cost
 
-  Each byte is scanned once. The parser keeps the container stack, the token in
-  progress (an unfinished string or number, bounded by `:max_token_bytes`), at
-  most 11 carried bytes of an incomplete character, escape, or literal, and the
-  keys already seen in each open object (needed to reject duplicates). It does
-  not keep the input. String and number pieces are copied out of the chunk, so
-  a parser state does not keep chunk binaries alive.
+  Each byte is scanned once. The parser keeps the container stack (with each
+  container's path), the token in progress (an unfinished string or number,
+  bounded by `:max_token_bytes`), at most 11 carried bytes of an incomplete
+  character, escape, or literal, and the keys already seen in each open object
+  (needed to reject duplicates). It does not keep the input. String and number
+  pieces that reference a chunk are copied, so a parser state does not keep
+  chunk binaries alive.
+
+  Each `feed/2` call has a small fixed cost, so fewer, larger chunks are
+  cheaper than many tiny ones. All events of a chunk are returned together:
+  feeding a large document in one chunk materializes all of its events at
+  once. Event paths are separate lists, so their memory grows with nesting
+  depth. See `docs/design.md` for measurements.
   """
 
   alias Formata.Codec.JSON.Stream.Machine
@@ -137,10 +144,7 @@ defmodule Formata.Codec.JSON.Stream do
             max_depth: 1024,
             max_document_bytes: 64 * 1024 * 1024,
             max_token_bytes: 8 * 1024 * 1024,
-            mode: {:value, nil},
-            stack: [],
-            depth: 0,
-            token: nil,
+            m: Machine.initial(),
             carry: <<>>,
             offset: 0,
             line: 1,
@@ -198,49 +202,26 @@ defmodule Formata.Codec.JSON.Stream do
     else
       data = if st.carry == <<>>, do: chunk, else: st.carry <> chunk
 
-      case Machine.run(data, %{st | carry: <<>>}) do
-        {:ok, consumed, st2, events} ->
-          {st2, events} = settle(st2, events)
-          carry = :binary.copy(binary_part(data, consumed, byte_size(data) - consumed))
-          {line, column} = advance(st.line, st.column, binary_part(data, 0, consumed))
+      case Machine.run(data, st) do
+        {:ok, consumed, m, events} ->
+          {m, events} = Machine.settle(m, st.string_deltas, events)
+          size = byte_size(data)
 
-          st2 = %{
-            st2
-            | carry: carry,
-              offset: st.offset + consumed,
-              line: line,
-              column: column
-          }
+          # At most 11 bytes: on OTP 28+ such a slice is copied by the runtime
+          # (sub-binaries of up to 64 bytes are not references), so it never
+          # keeps the chunk alive.
+          carry = binary_part(data, consumed, size - consumed)
 
-          {:ok, Enum.reverse(events), st2}
+          {line, column} = advance(st.line, st.column, data, consumed)
+
+          {:ok, :lists.reverse(events),
+           %{st | m: m, carry: carry, offset: st.offset + consumed, line: line, column: column}}
 
         {:error, code, message, index, at} ->
           machine_error(code, message, st, at, data, index)
       end
     end
   end
-
-  # Copies the chunk pieces held by an unfinished token and, for string values,
-  # emits them as a delta.
-  defp settle(%{token: {:string, role, acc, fresh, size}} = st, events) do
-    piece = :binary.copy(IO.iodata_to_binary(fresh))
-
-    events =
-      if role == :value and st.string_deltas and piece != "" do
-        [{:string_delta, Machine.path(st.stack), piece} | events]
-      else
-        events
-      end
-
-    {%{st | token: {:string, role, [acc | [piece]], [], size}}, events}
-  end
-
-  defp settle(%{token: {:number, nstate, acc, fresh, size}} = st, events) do
-    piece = :binary.copy(IO.iodata_to_binary(fresh))
-    {%{st | token: {:number, nstate, [acc | [piece]], [], size}}, events}
-  end
-
-  defp settle(st, events), do: {st, events}
 
   @doc """
   Ends the input and checks that a complete document was received.
@@ -262,46 +243,58 @@ defmodule Formata.Codec.JSON.Stream do
     end_index = byte_size(st.carry)
 
     cond do
-      st.carry != <<>> and st.token == :line_comment ->
+      st.carry != <<>> and Machine.token(st.m) == :line_comment ->
         error(:syntax, "invalid UTF-8", st, st.carry, 0, %{})
 
       st.carry != <<>> ->
         incomplete("unexpected end of input inside #{carry_context(st)}", st, end_index)
 
       true ->
-        case Machine.finish_number(st) do
-          {:ok, st2, events} -> finish_mode(st2, Enum.reverse(events))
+        case Machine.finish_number(st.m) do
+          {:ok, m, events} -> finish_mode(m, st, :lists.reverse(events))
           {:error, code, message, _index, at} -> machine_error(code, message, st, at, "", 0)
         end
     end
   end
 
-  defp finish_mode(%{token: token} = st, _events) when token not in [nil, :line_comment] do
-    what =
-      case token do
-        {:string, :key, _, _, _} -> "an object key"
-        {:string, :value, _, _, _} -> "a string"
-        {:number, _, _, _, _} -> "a number"
-        :block_comment -> "a block comment"
-      end
+  defp finish_mode(m, st, events) do
+    token = Machine.token(m)
 
-    incomplete("unexpected end of input inside #{what}", st, 0)
+    cond do
+      token not in [nil, :line_comment] ->
+        what =
+          case token do
+            {:string, :key, _, _, _} -> "an object key"
+            {:string, :value, _, _, _} -> "a string"
+            {:number, _, _, _, _} -> "a number"
+            :block_comment -> "a block comment"
+          end
+
+        incomplete("unexpected end of input inside #{what}", st, 0)
+
+      Machine.mode(m) == :done ->
+        {:ok, events}
+
+      true ->
+        case Machine.stack(m) do
+          [] ->
+            incomplete("unexpected end of input: no JSON value", st, 0)
+
+          [frame | _] ->
+            container = if elem(frame, 0) == :array, do: "an array", else: "an object"
+            incomplete("unexpected end of input inside #{container}", st, 0)
+        end
+    end
   end
 
-  defp finish_mode(%{mode: :done}, events), do: {:ok, events}
-
-  defp finish_mode(%{stack: []} = st, _events),
-    do: incomplete("unexpected end of input: no JSON value", st, 0)
-
-  defp finish_mode(%{stack: [frame | _]} = st, _events) do
-    container = if elem(frame, 0) == :array, do: "an array", else: "an object"
-    incomplete("unexpected end of input inside #{container}", st, 0)
+  defp carry_context(st) do
+    case {Machine.token(st.m), st.carry} do
+      {{:string, _, _, _, _}, _} -> "a string"
+      {:block_comment, _} -> "a block comment"
+      {_, "/" <> _} -> "a comment"
+      _ -> "a literal"
+    end
   end
-
-  defp carry_context(%{token: {:string, _, _, _, _}}), do: "a string"
-  defp carry_context(%{token: :block_comment}), do: "a block comment"
-  defp carry_context(%{carry: "/" <> _}), do: "a comment"
-  defp carry_context(_st), do: "a literal"
 
   defp incomplete(message, st, index),
     do: error(:incomplete, message, st, st.carry, index, %{})
@@ -435,27 +428,93 @@ defmodule Formata.Codec.JSON.Stream do
     Error.error(:parse, code, "#{message} at position #{offset}",
       backend: __MODULE__,
       format: :json,
-      path: Machine.path(st.stack),
+      path: Machine.path(Machine.stack(st.m)),
       location: %{offset: offset, line: line, column: column},
       details: details
     )
   end
 
-  defp advance(line, column, consumed) do
-    case :binary.matches(consumed, "\n") do
-      [] ->
-        {line, column + code_points(consumed)}
+  # Advances line/column over data[0, consumed): one pass, no copies. Columns
+  # count code points (bytes that are not UTF-8 continuation bytes).
+  #
+  # Seven bytes at a time (56-bit words keep the arithmetic on BEAM small
+  # integers) while a word has no newline:
+  #   * a word without high bits is 7 ASCII code points;
+  #   * otherwise its continuation bytes (bit 7 set, bit 6 clear) are counted
+  #     with a mask and a shift-and-add popcount.
+  # The newline test is the exact SWAR zero-byte test on `w ^ "\n\n..."`.
+  # Words containing a newline are handled byte by byte.
+  @highs 0x80808080808080
+  @ones 0x01010101010101
+  @newlines 0x0A0A0A0A0A0A0A
+  @highs4 0x80808080
+  @ones4 0x01010101
+  @newlines4 0x0A0A0A0A
 
-      newlines ->
-        {pos, 1} = List.last(newlines)
-        tail = binary_part(consumed, pos + 1, byte_size(consumed) - pos - 1)
-        {line + length(newlines), 1 + code_points(tail)}
+  defp advance(line, column, data, consumed), do: advance_bytes(data, consumed, line, column)
+
+  defp advance(line, column, consumed),
+    do: advance_bytes(consumed, byte_size(consumed), line, column)
+
+  defp advance_bytes(_data, 0, line, column), do: {line, column}
+
+  defp advance_bytes(<<w::56, rest::bits>>, n, line, column)
+       when n >= 7 and Bitwise.band(w, @highs) == 0 and
+              Bitwise.band(Bitwise.bxor(w, @newlines) - @ones, @highs) == 0,
+       do: advance_bytes(rest, n - 7, line, column + 7)
+
+  defp advance_bytes(<<w::56, rest::bits>> = data, n, line, column) when n >= 7 do
+    import Bitwise
+    y = bxor(w, @newlines)
+
+    if band(band(y - @ones, bnot(y)), @highs) == 0 do
+      continuation = band(w, bnot(w <<< 1)) &&& @highs
+      advance_bytes(rest, n - 7, line, column + 7 - popcount_high_bits(continuation))
+    else
+      advance_word(data, 7, n, line, column)
     end
   end
 
-  # Counts UTF-8 code points by skipping continuation bytes.
-  defp code_points(bin) do
-    continuation = for <<b <- bin>>, b in 0x80..0xBF, reduce: 0, do: (n -> n + 1)
-    byte_size(bin) - continuation
+  # The same for 4-byte words (short chunks such as token deltas).
+  defp advance_bytes(<<w::32, rest::bits>> = data, n, line, column) when n >= 4 do
+    import Bitwise
+    y = bxor(w, @newlines4)
+
+    cond do
+      band(band(y - @ones4, bnot(y)), @highs4) != 0 ->
+        advance_word(data, 4, n, line, column)
+
+      band(w, @highs4) == 0 ->
+        advance_bytes(rest, n - 4, line, column + 4)
+
+      true ->
+        continuation = band(w, bnot(w <<< 1)) &&& @highs4
+        advance_bytes(rest, n - 4, line, column + 4 - popcount_high_bits(continuation))
+    end
+  end
+
+  defp advance_bytes(data, n, line, column), do: advance_word(data, n, n, line, column)
+
+  # The next `k` bytes byte by byte (a word containing a newline, or the last
+  # bytes), then back to word steps.
+  defp advance_word(data, 0, n, line, column), do: advance_bytes(data, n, line, column)
+
+  defp advance_word(<<?\n, rest::bits>>, k, n, line, _column),
+    do: advance_word(rest, k - 1, n - 1, line + 1, 1)
+
+  defp advance_word(<<b, rest::bits>>, k, n, line, column) when b in 0x80..0xBF,
+    do: advance_word(rest, k - 1, n - 1, line, column)
+
+  defp advance_word(<<_, rest::bits>>, k, n, line, column),
+    do: advance_word(rest, k - 1, n - 1, line, column + 1)
+
+  # Number of set high bits (0x80 positions) in a 56-bit word.
+  defp popcount_high_bits(x) do
+    import Bitwise
+    x = x >>> 7
+    x = x + (x >>> 8)
+    x = x + (x >>> 16)
+    x = x + (x >>> 32)
+    x &&& 0xFF
   end
 end

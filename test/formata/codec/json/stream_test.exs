@@ -375,6 +375,72 @@ defmodule Formata.Codec.JSON.StreamTest do
       end
     end
 
+    test "locations match a reference at every end-of-input position" do
+      doc =
+        ~s({\r\n  "long": "#{String.duplicate("abcdefg", 9)}",\n  "ünï": ["é😀日本", ) <>
+          ~s("\\u00e9\\ud83d\\ude00", 12.5e3, true],\n\t"x": {"y": [null, -0]}\n})
+
+      reference = fn prefix ->
+        lines = :binary.split(prefix, "\n", [:global])
+        tail = List.last(lines)
+        column = 1 + Enum.count(:binary.bin_to_list(tail), &(&1 not in 0x80..0xBF))
+        %{offset: byte_size(prefix), line: length(lines), column: column}
+      end
+
+      for k <- 0..(byte_size(doc) - 1), chunks <- [:whole, :bytes, :sevens] do
+        prefix = binary_part(doc, 0, k)
+
+        input =
+          case chunks do
+            :whole ->
+              [prefix]
+
+            :bytes ->
+              bytes(prefix)
+
+            :sevens ->
+              prefix
+              |> :binary.bin_to_list()
+              |> Enum.chunk_every(7)
+              |> Enum.map(&IO.iodata_to_binary/1)
+          end
+
+        assert {:error, [%Error{code: :incomplete, location: location}]} = parse(input),
+               "prefix #{k} (#{chunks})"
+
+        assert location == reference.(prefix), "prefix #{k} (#{chunks})"
+      end
+    end
+
+    test "locations match a reference on random mixed-width text" do
+      chars = ["a", "b", " ", "é", "ß", "—", "日", "本", "😀", "𝄞", "x"]
+
+      for seed <- 1..12 do
+        :rand.seed(:exsss, {seed, 7, 11})
+        text = fn n -> Enum.map_join(1..n, fn _ -> Enum.random(chars) end) end
+        ws = fn -> Enum.random(["", " ", "\n", "  \n    ", "\r\n", "\n\n\t"]) end
+
+        doc =
+          "[" <>
+            Enum.map_join(1..6, ",", fn _ ->
+              ws.() <> ~s(") <> text.(:rand.uniform(30)) <> ~s(")
+            end) <>
+            ws.()
+
+        for k <- 0..byte_size(doc) do
+          prefix = binary_part(doc, 0, k)
+          lines = :binary.split(prefix, "\n", [:global])
+          tail = List.last(lines)
+          column = 1 + Enum.count(:binary.bin_to_list(tail), &(&1 not in 0x80..0xBF))
+
+          assert {:error, [%Error{code: :incomplete, location: location}]} = parse([prefix])
+
+          assert location == %{offset: k, line: length(lines), column: column},
+                 "seed #{seed}, prefix #{k}"
+        end
+      end
+    end
+
     test "incomplete input is reported by finish" do
       for {doc, text} <- [
             {"", "no JSON value"},
@@ -467,17 +533,40 @@ defmodule Formata.Codec.JSON.StreamTest do
 
     test "parser state does not retain chunk binaries" do
       big = String.duplicate("x", 100_000)
-      {:ok, p} = JSONStream.new()
-      {:ok, _, p} = JSONStream.feed(p, ~s([") <> big <> "ab")
-      {:string, :value, acc, [], _} = p.token
 
-      for piece <- List.flatten(acc), is_binary(piece) do
-        assert :binary.referenced_byte_size(piece) == byte_size(piece)
+      # A string value, a key, a number, and a carried partial character are
+      # all cut by the end of a large chunk.
+      for {chunk, opts} <- [
+            {~s([") <> big <> "ab", []},
+            {~s([") <> big <> "ab", [string_deltas: true]},
+            {~s({") <> big, []},
+            {~s([") <> big <> ~s(", 12345), []},
+            {~s([") <> big <> "\xC3", []},
+            {~s([") <> big <> ~s(\\u00), []}
+          ] do
+        {:ok, p} = JSONStream.new(opts)
+        {:ok, _, p} = JSONStream.feed(p, chunk)
+
+        for bin <- binaries(p) do
+          assert :binary.referenced_byte_size(bin) == byte_size(bin),
+                 "state keeps a #{byte_size(bin)}-byte slice of a larger binary"
+        end
       end
-
-      assert :binary.referenced_byte_size(p.carry) == byte_size(p.carry)
     end
   end
+
+  # Every binary inside a term (the parser state is opaque).
+  defp binaries(bin) when is_binary(bin), do: [bin]
+  defp binaries(list) when is_list(list), do: binaries_list(list)
+  defp binaries(tuple) when is_tuple(tuple), do: tuple |> Tuple.to_list() |> binaries()
+  defp binaries(%_{} = struct), do: struct |> Map.from_struct() |> binaries()
+  defp binaries(map) when is_map(map), do: map |> Map.to_list() |> binaries()
+  defp binaries(_other), do: []
+
+  # Handles improper lists (iodata with a binary tail).
+  defp binaries_list([head | tail]), do: binaries(head) ++ binaries_list(tail)
+  defp binaries_list([]), do: []
+  defp binaries_list(tail), do: binaries(tail)
 
   # -- decode_stream ----------------------------------------------------------------------
 

@@ -344,8 +344,9 @@ iex> Exception.message(error)
   classified with the Unicode tables of the runtime's PCRE library.
 * `Formata.Codec.JSON.Stream` handles one JSON document (no JSON5, no JSON
   Lines). Its error columns count Unicode code points, while `Formata.decode/3`
-  counts graphemes; byte offsets are the same. In a single large chunk it is
-  several times slower than `Formata.decode/3` (see `docs/design.md`).
+  counts graphemes; byte offsets are the same. On complete input it is
+  about 2–4× slower than `Formata.decode/3`; use it for input that arrives
+  incrementally (measurements in `docs/design.md`).
 * With `format_assertion: true`, `hostname`, `email`, `idn-hostname`, and
   `idn-email` values that contain an A-label (`xn--...`) or a non-ASCII label
   cannot be checked without the IDNA2008 tables. Validation returns a single
