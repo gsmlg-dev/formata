@@ -16,7 +16,7 @@ It is a plain functional library: no processes, no global state, no caches.
 ```elixir
 def deps do
   [
-    {:formata, "~> 0.2.0"}
+    {:formata, "~> 0.3.0"}
   ]
 end
 ```
