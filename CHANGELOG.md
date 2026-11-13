@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-13
+
+### Fixed
+
+- TOML assignments reject comments before a value, including inside inline
+  tables, while retaining comments in arrays and valid multiline values.
+  Missing values at CRLF boundaries now return syntax errors with locations
+  instead of an internal error-formatting failure.
+- TOML numeric underscores require digits on both sides, including after
+  exponent signs; incomplete fractions and exponents return syntax errors.
+- TOML date-time separators accept only `T`, `t`, or one ASCII space;
+  standalone dates still allow trailing whitespace.
+- Encoding rejects invalid UTF-8 map keys with structured `:invalid_key`
+  errors before rendering, including nested and inline TOML tables. The
+  shared check also protects JSON, JSON5, and YAML encoders.
+
+### Added
+
+- Deterministic TOML grammar-boundary regressions and independent `tomllib`
+  decoder comparisons, retaining all 208 valid and 509 invalid pinned
+  conformance inputs. See [the correctness review](docs/toml-correctness-review.md).
+
 ## [0.3.0] - 2026-11-13
 
 ### Added

@@ -140,6 +140,10 @@ tests) and are not part of the public API.
   escapes, table redefinition rules, inline tables, crashes on invalid UTF-8);
   all are fixed. The decoder passes the full toml-test 1.0.0 suite (208 valid,
   509 invalid); encoder output is also checked with Python's `tomllib`.
+  The [correctness review](toml-correctness-review.md) records subsequent
+  assignment/comment, numeric underscore, date-time separator, and UTF-8
+  encoding-key fixes, with deterministic boundary coverage. Historical
+  upstream issue state is independent of fixes maintained in this fork.
 * YAML: `Formata.YamlElixir.read_from_string/2` silently returns the last document,
   keeps the first duplicate key, renames `<<` keys, and maps a null root to
   `%{}`. Formata uses `read_all_from_string/2` and inspects yamerl's detailed

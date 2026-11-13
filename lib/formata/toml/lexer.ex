@@ -244,7 +244,7 @@ defmodule Formata.Toml.Lexer do
     do: {:ok, rest, {:newline, skip + 1, 0, lines + 1}}
 
   defp do_lex(<<c::utf8, rest::binary>>, skip, lines) when is_whitespace(c),
-    do: lex_whitespace(rest, skip + 1, lines)
+    do: lex_whitespace(rest, skip + 1, [c], lines)
 
   defp do_lex(<<"true", rest::binary>>, skip, lines),
     do: {:ok, rest, {true, skip + 4, 0, lines}}
@@ -310,17 +310,19 @@ defmodule Formata.Toml.Lexer do
   defp do_lex(<<c, _::binary>>, skip, lines),
     do: {:error, {:invalid_unicode, <<c>>}, skip + 1, lines}
 
-  defp lex_whitespace(<<c::utf8, rest::binary>>, skip, lines) when is_whitespace(c),
-    do: lex_whitespace(rest, skip + 1, lines)
+  defp lex_whitespace(<<c::utf8, rest::binary>>, skip, acc, lines) when is_whitespace(c),
+    do: lex_whitespace(rest, skip + 1, [c | acc], lines)
 
-  defp lex_whitespace(rest, skip, lines),
-    do: {:ok, rest, {:whitespace, skip, 0, lines}}
+  defp lex_whitespace(rest, skip, acc, lines),
+    do: {:ok, rest, {:whitespace, skip, acc |> Enum.reverse() |> IO.chardata_to_string(), lines}}
 
-  defp lex_comment(<<?\r, ?\n, rest::binary>>, skip, size, lines),
-    do: {:ok, rest, {:comment, skip + 2, size, lines + 1}}
+  # Keep the newline separate: whether it may be skipped is a grammar decision
+  # (arrays allow it, an assignment still waiting for its value does not).
+  defp lex_comment(<<?\r, ?\n, _::binary>> = rest, skip, size, lines),
+    do: {:ok, rest, {:comment, skip, size, lines}}
 
-  defp lex_comment(<<?\n, rest::binary>>, skip, size, lines),
-    do: {:ok, rest, {:comment, skip + 1, size, lines + 1}}
+  defp lex_comment(<<?\n, _::binary>> = rest, skip, size, lines),
+    do: {:ok, rest, {:comment, skip, size, lines}}
 
   # Control characters other than tab are not allowed in comments
   defp lex_comment(<<c::utf8, _::binary>>, skip, _size, lines)

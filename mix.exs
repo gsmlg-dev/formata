@@ -53,6 +53,7 @@ defmodule Formata.MixProject do
       extras: [
         "README.md",
         "docs/design.md",
+        "docs/toml-correctness-review.md",
         "docs/release.md",
         "CHANGELOG.md",
         "NOTICE.md",

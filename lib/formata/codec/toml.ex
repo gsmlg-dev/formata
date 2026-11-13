@@ -9,12 +9,17 @@ defmodule Formata.Codec.TOML do
     * `inf`, `-inf`, `nan` become `:infinity`, `:negative_infinity`, `:nan`.
     * Local date, local time, and local date-time become `Date`, `Time`, and
       `NaiveDateTime`.
+    * Date-time separators are `T`, `t`, or exactly one ASCII space.
+      Fractional seconds retain up to six digits; excess digits are truncated.
     * Offset date-times become UTC `DateTime` values. `Formata.Toml` converts the
       instant to UTC, so the original offset (for example `-08:00`) is not
       preserved; the instant is.
     * Duplicate keys and table redefinitions are rejected by the decoder as
       `:parse` / `:syntax` errors.
     * Line/column are included when the decoder reports them.
+    * Comments cannot replace an assignment's value. Arrays allow comments
+      and newlines; inline tables allow newlines only within valid values
+      such as multiline strings and arrays.
 
   Options: `:filename` (used in decoder messages).
 
@@ -23,6 +28,8 @@ defmodule Formata.Codec.TOML do
   See `Formata.Codec.TOML.Encoder` for the accepted domain. `nil` has no TOML
   representation and is rejected; use `Formata.Transform.drop_nils/1` or
   `Formata.Transform.replace_nils/2` explicitly when that loss is acceptable.
+  Invalid UTF-8 keys return `:encode` / `:invalid_key`, with the containing
+  map's path and the offending key in `details.key`.
   """
 
   @behaviour Formata.Codec

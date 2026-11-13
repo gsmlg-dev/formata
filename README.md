@@ -337,6 +337,16 @@ expected values and rejects all 509 invalid ones, and every value from the
 valid cases is encoded and parsed again by `Formata.Toml` and by Python's
 `tomllib` as an independent parser.
 
+Date-times require `T`, `t`, or exactly one ASCII space between date and time.
+Fractional seconds retain up to six digits (microseconds); additional digits
+are truncated. Comments cannot stand in for an assignment's value. Arrays
+may contain comments and newlines, including when used inside inline tables;
+inline tables also permit newlines within multiline string values. Encoding
+requires valid UTF-8 keys at every nesting level; invalid keys report
+`:encode` / `:invalid_key`, the containing map's path, and `details.key`.
+See the [TOML correctness review](docs/toml-correctness-review.md) for boundary
+coverage and the separate status of the original upstream issues.
+
 ## Errors
 
 `%Formata.Error{}` fields: `kind` (`:parse`, `:encode`, `:schema`,

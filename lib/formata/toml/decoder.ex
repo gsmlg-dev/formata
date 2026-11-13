@@ -175,7 +175,7 @@ defmodule Formata.Toml.Decoder do
     end
   end
 
-  defp seek_line(original, <<?\r, ?\n, rest::binary>>, lastnl, from, len, 1) when len <= 0 do
+  defp seek_line(original, <<?\r, ?\n, rest::binary>>, lastnl, from, len, 1) when len <= 1 do
     # Content occurred on the last line right before the newline
     seek_line(original, rest, lastnl, from + 2, 0, 0)
   end
@@ -509,12 +509,14 @@ defmodule Formata.Toml.Decoder do
         # +/- are allowed after e/E
         float(lexer, signal, [sign | parts])
 
-      {:ok, {:alpha, _, <<c::utf8>>, _}} when c in ~c"eE" and signal == ?. ->
-        # Valid if after a dot
+      {:ok, {:alpha, _, <<c::utf8>>, _}}
+      when c in ~c"eE" and signal == ?. and is_binary(last) ->
+        # The fraction must contain digits before an exponent marker.
         float(lexer, ?e, [?e | parts])
 
-      {:ok, {?_, skip, _, lines}} when last not in ~c"_e." ->
-        # Valid only when surrounded by digits
+      {:ok, {?_, skip, _, lines}} when is_binary(last) ->
+        # Only digit tokens are binaries in `parts`. Check both neighbors
+        # before dropping the underscore, including after an exponent sign.
         with {:ok, {:digits, _, d, _}} <- Lexer.peek(lexer),
              _ = Lexer.advance(lexer) do
           float(lexer, signal, [d | parts])
@@ -529,11 +531,7 @@ defmodule Formata.Toml.Decoder do
       {:ok, {:digits, _, d, _}} ->
         float(lexer, signal, [d | parts])
 
-      {:ok, {type, skip, data, lines}} when last in ~c"e." ->
-        # Incomplete float
-        {:error, {:invalid_float, {type, data}}, skip, lines}
-
-      {:ok, {_type, skip, _data, lines} = token} when last not in ~c"_e." ->
+      {:ok, {_type, skip, _data, lines} = token} when is_binary(last) ->
         # Done
         Lexer.push(lexer, token)
 
@@ -543,6 +541,10 @@ defmodule Formata.Toml.Decoder do
           {:error, reason} ->
             {:error, reason, skip, lines}
         end
+
+      {:ok, {type, skip, data, lines}} ->
+        # A decimal point, exponent marker, or exponent sign needs digits.
+        {:error, {:invalid_float, {type, data}}, skip, lines}
     end
   end
 
@@ -614,13 +616,17 @@ defmodule Formata.Toml.Decoder do
             datetime(lexer, [dd, ?-, mm, ?-, yy], time)
           end
 
-        {:ok, {:whitespace, _, _, _}} ->
+        {:ok, {:whitespace, separator_skip, separator, separator_lines}} ->
           case Lexer.peek(lexer) do
-            {:ok, {:digits, _, <<_::utf8, _::utf8>>, _}} ->
+            {:ok, {:digits, _, <<_::utf8, _::utf8>>, _}} when separator == " " ->
               # Expecting a time
               with {:ok, time} <- time(lexer) do
                 datetime(lexer, [dd, ?-, mm, ?-, yy], time)
               end
+
+            {:ok, {:digits, _, <<_::utf8, _::utf8>>, _}} ->
+              {:error, {:invalid_token, {:whitespace, separator}}, separator_skip,
+               separator_lines}
 
             _ ->
               # Just a date
@@ -739,10 +745,6 @@ defmodule Formata.Toml.Decoder do
     case peek_skip(lexer, [:whitespace]) do
       {:error, _, _, _} = err ->
         err
-
-      {:ok, {:comment, _, _, _}} ->
-        Lexer.advance(lexer)
-        value(lexer)
 
       {:ok, {?\[, _skip, _, _lines}} ->
         # Need to embellish some errors with line/col

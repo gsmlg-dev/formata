@@ -183,12 +183,22 @@ defmodule Formata.Codec do
     v
     |> Enum.sort_by(fn {k, _} -> k end)
     |> Enum.reduce(acc, fn {k, item}, acc ->
+      message =
+        cond do
+          is_binary(k) and not String.valid?(k) ->
+            "key #{inspect(k)} is not valid UTF-8 text"
+
+          not p.key?.(k) ->
+            "key #{inspect(k)} is not allowed: #{p.key_hint}"
+
+          true ->
+            nil
+        end
+
       acc =
-        if p.key?.(k) do
-          acc
-        else
+        if message do
           error =
-            Error.new(:encode, :invalid_key, "key #{inspect(k)} is not allowed: #{p.key_hint}",
+            Error.new(:encode, :invalid_key, message,
               backend: p.backend,
               format: p.format,
               path: Enum.reverse(path),
@@ -196,6 +206,8 @@ defmodule Formata.Codec do
             )
 
           [error | acc]
+        else
+          acc
         end
 
       walk(item, [k | path], p, acc)
