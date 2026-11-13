@@ -2,7 +2,7 @@ defmodule Formata do
   @moduledoc """
   Composable data codecs, schemas, and validation for Elixir.
 
-  Formata decodes and encodes JSON, TOML, and YAML, validates data against
+  Formata decodes and encodes JSON, JSON5, TOML, and YAML, validates data against
   native (`Formata.Backplane.Schema`) schemas or JSON Schema documents
   (`Formata.Backplane.JsonSchema`), and applies explicit transformations.
 
@@ -32,7 +32,7 @@ defmodule Formata do
   @doc """
   Decodes a document.
 
-  `format` is `:json`, `:toml`, `:yaml`, or a `Formata.Codec` module; `opts`
+  `format` is `:json`, `:json5`, `:toml`, `:yaml`, or a `Formata.Codec` module; `opts`
   are passed to the codec.
 
       iex> Formata.decode("name: Ada", :yaml)

@@ -24,7 +24,7 @@ defmodule Formata.Error do
     * `:backend` - the module that produced or detected the failure
       (`Formata.Jason`, `Formata.Toml`, `Formata.YamlElixir`, `Formata.Ymlr`, `Formata.Backplane.Schema`,
       `Formata.Backplane.JsonSchema`, or a Formata module for checks Formata performs).
-    * `:format` - the codec format (`:json`, `:toml`, `:yaml`) when relevant.
+    * `:format` - the codec format (`:json`, `:json5`, `:toml`, `:yaml`) when relevant.
     * `:path` - the data path as a list of map keys and list indexes
       (`[]` is the root).
     * `:schema_path` - the schema location when it is known.

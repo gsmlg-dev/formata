@@ -7,6 +7,7 @@ defmodule Formata.Codec do
   | Format  | Module                | Decoder          | Encoder                     |
   | ------- | --------------------- | ---------------- | --------------------------- |
   | `:json` | `Formata.Codec.JSON`  | `Formata.Jason`          | `Formata.Jason`                     |
+  | `:json5` | `Formata.Codec.JSON5` | `Formata.Codec.JSON5` (native) | `Formata.Codec.JSON5` (native) |
   | `:toml` | `Formata.Codec.TOML`  | `Formata.Toml` (gsmlg_toml) | `Formata.Codec.TOML.Encoder` |
   | `:yaml` | `Formata.Codec.YAML`  | `Formata.YamlElixir`     | `Formata.Ymlr`                      |
 
@@ -43,7 +44,7 @@ defmodule Formata.Codec do
 
   alias Formata.Error
 
-  @type format :: :json | :toml | :yaml | module
+  @type format :: :json | :json5 | :toml | :yaml | module
   @type result(t) :: {:ok, t} | {:error, [Error.t(), ...]}
 
   @doc "Returns the format name used in errors."
@@ -55,7 +56,12 @@ defmodule Formata.Codec do
   @doc "Encodes a term as a complete document."
   @callback encode(data :: term, opts :: keyword) :: result(binary)
 
-  @builtin %{json: Formata.Codec.JSON, toml: Formata.Codec.TOML, yaml: Formata.Codec.YAML}
+  @builtin %{
+    json: Formata.Codec.JSON,
+    json5: Formata.Codec.JSON5,
+    toml: Formata.Codec.TOML,
+    yaml: Formata.Codec.YAML
+  }
 
   @doc """
   Resolves a format atom or codec module to a codec module.
@@ -76,7 +82,7 @@ defmodule Formata.Codec do
       Error.error(
         :unsupported,
         :unknown_format,
-        "unknown format #{inspect(module)}; expected :json, :toml, :yaml, or a Formata.Codec module",
+        "unknown format #{inspect(module)}; expected :json, :json5, :toml, :yaml, or a Formata.Codec module",
         details: %{format: module, supported: Map.keys(@builtin)}
       )
     end
