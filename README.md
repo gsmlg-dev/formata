@@ -22,8 +22,8 @@ end
 ```
 
 Requires Elixir 1.18 or later (the forked schema backends use Elixir 1.18's
-built-in `JSON` module) and Erlang/OTP 25 or later (the minimum of Elixir
-1.18). CI covers Elixir 1.18 and 1.20 on OTP 27/28.
+built-in `JSON` module) and Erlang/OTP 28 or later. CI covers the minimum
+(Elixir 1.18 on OTP 28) and Elixir 1.20 on OTP 28.
 
 Formata has **no runtime dependencies**. Its backends are maintained forks,
 renamed into the `Formata` namespace so they never clash with the original

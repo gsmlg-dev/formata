@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Supported versions are documented as Elixir 1.18+ on Erlang/OTP 28+
+  (previously OTP 25+), and CI now tests the minimum combination, Elixir 1.18
+  on OTP 28, instead of OTP 27.
+
 ## [0.2.0] - 2026-11-13
 
 ### Added
