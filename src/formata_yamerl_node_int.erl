@@ -102,24 +102,25 @@ node_pres(Node) ->
 %% Internal functions.
 %% -------------------------------------------------------------------
 
-%% Sign.
-string_to_integer([$+ | Text]) ->
-    string_to_integer2(Text);
-string_to_integer([$- | Text]) ->
-    case string_to_integer2(Text) of
+%% YAML 1.2 core: signs belong to decimal integers, not base prefixes.
+%% Require the first digit before entering helpers whose empty tail is valid.
+string_to_integer([$+, C | Rest]) when C >= $0, C =< $9 ->
+    base10_to_integer(Rest, C - $0);
+string_to_integer([$-, C | Rest]) when C >= $0, C =< $9 ->
+    case base10_to_integer(Rest, C - $0) of
         error -> error;
-        Int   -> -Int
+        Int -> -Int
     end;
-string_to_integer(Text) ->
-    string_to_integer2(Text).
-
-%% Base.
-string_to_integer2("0x" ++ Text) ->
-    base16_to_integer(Text, 0);
-string_to_integer2("0o" ++ Text) ->
-    base8_to_integer(Text, 0);
-string_to_integer2(Text) ->
-    base10_to_integer(Text, 0).
+string_to_integer([$0, $x, C | Rest]) when
+  (C >= $0 andalso C =< $9) orelse
+  (C >= $a andalso C =< $f) orelse
+  (C >= $A andalso C =< $F) ->
+    base16_to_integer([C | Rest], 0);
+string_to_integer([$0, $o, C | Rest]) when C >= $0, C =< $7 ->
+    base8_to_integer(Rest, C - $0);
+string_to_integer([C | Rest]) when C >= $0, C =< $9 ->
+    base10_to_integer(Rest, C - $0);
+string_to_integer(_) -> error.
 
 %% Parsing.
 base10_to_integer([C | Rest], Int) when C >= $0 andalso C =< $9 ->

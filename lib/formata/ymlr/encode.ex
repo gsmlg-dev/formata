@@ -39,10 +39,11 @@ defmodule Formata.Ymlr.Encode do
 
   #### Chars `\n` and `\t`
 
-  These two characters are never converted to their escape characters.
-  One exception: If the given string is literally just a newline, we
-  encode it as "\n" (double quotes required for escape chars) rather than a
-  single newline.
+  Tabs can remain literal. Newlines use block style when it preserves the
+  value; double-quoted scalars escape every newline. Strings with leading
+  indentation, CRLF, or control characters use double quotes so YAML's block
+  normalization cannot alter their content. Multiline keys also use double
+  quotes, with YAML escapes rather than Elixir string inspection.
 
   #### Chars `"` and `\`
 
@@ -56,7 +57,7 @@ defmodule Formata.Ymlr.Encode do
 
   First matching rule is applied:
 
-  1. Char is `\t` or `\n` => leave alone
+  1. Char is `\t` => leave alone; `\n` => escape within double quotes
   1. Char is `"` or `\` => if within double quotes, escape. Otherwise leave alone.
   1. Char has an escape character (i.e. is part of `c-ns-esc-char`) => force double quotes and encode as escape character
   1. Char is a printable character => leave alone
@@ -93,10 +94,17 @@ defmodule Formata.Ymlr.Encode do
     # double and single quotes
     "\"",
     "- ",
+    "-\t",
     ": ",
+    ":\t",
     ":{",
     "%",
     "? ",
+    "?\t",
+    "--- ",
+    "---\t",
+    "... ",
+    "...\t",
     "0b",
     "0o",
     "0x",
@@ -121,7 +129,7 @@ defmodule Formata.Ymlr.Encode do
     :"+inf" => ".inf"
   }
 
-  @quote_when_contains_string [" #", ": "]
+  @quote_when_contains_string [" #", "\t#", ": ", ":\t"]
 
   @quote_when_last_char [?\s, ?\t, ?:]
 
@@ -154,7 +162,9 @@ defmodule Formata.Ymlr.Encode do
     "ON",
     "off",
     "Off",
-    "OFF"
+    "OFF",
+    "---",
+    "..."
   ]
 
   # Escape chars that, if contained within, force the string to be double-quoted:
@@ -175,7 +185,8 @@ defmodule Formata.Ymlr.Encode do
   # Chars that, if contained within, force the string to be double-quoted:
   @escape_chars_forcing_double_quotes @escape_chars -- ~c"\"\\"
   defguard force_double_quote(char)
-           when not is_printable(char) or char in @escape_chars_forcing_double_quotes
+           when not is_printable(char) or char in @escape_chars_forcing_double_quotes or
+                  char == 0xFEFF
 
   # coveralls-ignore-stop
 
@@ -279,6 +290,7 @@ defmodule Formata.Ymlr.Encode do
     def atom(unquote(input)), do: unquote(encoded)
   end
 
+  def atom(nil), do: "null"
   def atom(data), do: Atom.to_string(data)
 
   @spec string(binary(), integer) :: iodata()
@@ -291,6 +303,7 @@ defmodule Formata.Ymlr.Encode do
   defp encode_map_key_atoms(data), do: encode_map_key(data)
 
   defp encode_map_key(data) when is_atom(data), do: [Atom.to_string(data), ?:]
+  defp encode_map_key("<<"), do: "'<<':"
   defp encode_map_key(data) when is_binary(data), do: [encode_binary(data, nil), ?:]
   defp encode_map_key(data) when is_number(data), do: ["#{data}:"]
 
@@ -389,6 +402,9 @@ defmodule Formata.Ymlr.Encode do
     defp escape_char(unquote(char)), do: unquote(escaped)
   end
 
+  defp escape_char(?\n), do: "\\n"
+  defp escape_char(0xFEFF), do: "\\uFEFF"
+
   defp escape_char(char) when requires_unicode_escape(char) and char <= 0xFF,
     do: List.to_string(:io_lib.format("\\x~2.16.0B", [char]))
 
@@ -404,7 +420,7 @@ defmodule Formata.Ymlr.Encode do
   defp escape_char(char), do: <<char::utf8>>
 
   # for example for map keys
-  defp multiline(data, nil), do: inspect(data)
+  defp multiline(data, nil), do: with_double_quotes(data)
   # see https://yaml-multiline.info/
 
   # This is pure aesthetics: If we are on level 0 (no indentation), we add one
@@ -412,6 +428,20 @@ defmodule Formata.Ymlr.Encode do
   defp multiline(data, 0), do: multiline(data, 1)
 
   defp multiline(data, level) do
+    first_content_line = data |> String.split("\n") |> Enum.find(&(&1 != ""))
+
+    # Automatic block indentation consumes leading content whitespace. Blocks
+    # also normalize CRLF and cannot contain raw control characters. Quote
+    # these values explicitly, including LF, to preserve the original string.
+    if is_nil(first_content_line) or String.starts_with?(first_content_line, [" ", "\t"]) or
+         Enum.any?(String.to_charlist(data), fn char -> force_double_quote(char) end) do
+      with_double_quotes(data)
+    else
+      block(data, level)
+    end
+  end
+
+  defp block(data, level) do
     indentation = indent(level)
 
     block =
@@ -445,15 +475,6 @@ defmodule Formata.Ymlr.Encode do
   defp indent(level), do: ["\n" | List.duplicate("  ", level)]
 
   defp numeric?(string) do
-    case Float.parse(string) do
-      {_, ""} -> true
-      _ -> false
-    end
-  rescue
-    #  Apparently not needed anymore since Elixir 1.14. Left in for bc but stop covering.
-    # coveralls-ignore-start
-    _ ->
-      false
-      # coveralls-ignore-stop
+    Regex.match?(~r/\A[-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?\z/, string)
   end
 end

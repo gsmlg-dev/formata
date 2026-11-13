@@ -314,9 +314,11 @@ Policies:
 * **Duplicate keys** are rejected by every decoder, compared after unescaping
   (`:duplicate_key`, or the TOML decoder's syntax error).
 * **YAML** is single-document: multiple documents are rejected
-  (`:multiple_documents`); an empty stream decodes to `nil`. Merge keys (`<<`)
-  are rejected. Anchors/aliases are expanded. Comments, formatting, anchors,
-  and key order are not preserved by any codec.
+  (`:multiple_documents`); an empty stream/document decodes to `nil`, and
+  `{}` remains a map. Plain implicit `<<` keys are rejected as a merge
+  convention; quoted `"<<"` and explicitly tagged `!!str <<` are ordinary
+  string keys. Anchors/aliases are expanded within per-call limits. Comments,
+  formatting, anchors, and key order are not preserved by any codec.
 * **Encoding** rejects every value outside the target's domain with an
   `:encode` error and its path (`:unrepresentable`, `:invalid_key`,
   `:invalid_root`, `:out_of_range`). Nothing is dropped, stringified, replaced,
@@ -346,6 +348,23 @@ requires valid UTF-8 keys at every nesting level; invalid keys report
 `:encode` / `:invalid_key`, the containing map's path, and `details.key`.
 See the [TOML correctness review](docs/toml-correctness-review.md) for boundary
 coverage and the separate status of the original upstream issues.
+
+YAML defaults to the YAML 1.2 core schema: timestamp-like scalars stay strings,
+and incomplete integers such as `+`, `0x`, and `0o` stay strings. An explicit
+`%YAML 1.1` directive selects the vendored YAML 1.1 resolution rules instead;
+for example, `yes` is then a boolean and `012` is octal. Decoder scalar keys
+retain their types (including null and floats); sequence and mapping keys
+are explicitly unsupported. Encoder keys remain limited to strings,
+integers, and booleans. Neither direction creates atoms from input.
+
+Both YAML operations accept `max_depth: 128` and `max_nodes: 100_000` by
+default. Depth counts the root as zero and includes mapping keys and values.
+The node budget counts the expanded tree, including every repeated alias
+occurrence, mapping key, and value. Limits are checked before alias
+materialization and apply to encoder input and its mandatory round-trip
+verification. See `Formata.Codec.YAML` and the
+[YAML correctness review](docs/yaml-correctness-review.md) for exact errors,
+version/profile decisions, and validation evidence.
 
 ## Errors
 

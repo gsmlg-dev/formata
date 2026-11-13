@@ -104,22 +104,34 @@ node_pres(Node) ->
 %% Internal functions.
 %% -------------------------------------------------------------------
 
-%% Sign.
-string_to_integer([$+ | Text]) ->
-    string_to_integer2(Text);
-string_to_integer([$- | Text]) ->
+%% Validate the YAML 1.1 integer production before stripping signs and
+%% separators. In particular an empty suffix is not an integer zero.
+string_to_integer(Text) ->
+    Pattern = "^[+-]?(0b[0-1_]+|0[0-7_]*|[1-9][0-9_]*|0x[0-9a-fA-F_]+|[1-9][0-9_]*(:[0-5]?[0-9])+)$",
+    case re:run(Text, Pattern, [{capture, none}]) of
+        match -> signed_integer(Text);
+        nomatch -> error
+    end.
+
+signed_integer([$+ | Text]) -> string_to_integer2(Text);
+signed_integer([$- | Text]) ->
     case string_to_integer2(Text) of
         error -> error;
-        Int   -> -Int
+        Int -> -Int
     end;
-string_to_integer(Text) ->
-    string_to_integer2(Text).
+signed_integer(Text) -> string_to_integer2(Text).
 
 %% Base.
 string_to_integer2("0b" ++ Text) ->
-    base2_to_integer(Text, 0);
+    case lists:any(fun(C) -> C =/= $_ end, Text) of
+        true -> base2_to_integer(Text, 0);
+        false -> error
+    end;
 string_to_integer2("0x" ++ Text) ->
-    base16_to_integer(Text, 0);
+    case lists:any(fun(C) -> C =/= $_ end, Text) of
+        true -> base16_to_integer(Text, 0);
+        false -> error
+    end;
 string_to_integer2("0" ++ Text) ->
     base8_to_integer(Text, 0);
 string_to_integer2(Text) ->

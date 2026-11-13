@@ -62,14 +62,14 @@ construct_token(#formata_yamerl_constr{detailed_constr = false, ext_options = Op
         Encoding -> unicode:characters_to_binary(Text, unicode, Encoding)
     end,
     {finished, Node};
-construct_token(#formata_yamerl_constr{detailed_constr = true, ext_options = Options},
+construct_token(#formata_yamerl_constr{detailed_constr = true, ext_options = Options} = Constr,
   undefined, #formata_yamerl_scalar{text = Text} = Token) ->
     Text1 = case proplists:get_value(str_node_as_binary, Options, false) of
         false    -> Text;
         true     -> unicode:characters_to_binary(Text);
         Encoding -> unicode:characters_to_binary(Text, unicode, Encoding)
     end,
-    Pres = formata_yamerl_constr:get_pres_details(Token),
+    Pres = formata_yamerl_constr:get_pres_details(Token, Constr),
     Node = #formata_yamerl_str{
       module = ?MODULE,
       tag    = ?TAG,

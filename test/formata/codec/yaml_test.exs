@@ -117,12 +117,10 @@ defmodule Formata.Codec.YAMLTest do
       assert {:error, [%Error{code: :invalid_key}]} = Formata.encode(%{[1] => 1}, :yaml)
     end
 
-    test "fails instead of emitting YAML that reads back differently" do
-      # Formata.Ymlr leaves ".5" unquoted, which YAML resolves to the float 0.5.
-      assert {:error, [%Error{kind: :encode, code: :roundtrip_mismatch, path: ["v"]} = error]} =
-               Formata.encode(%{"v" => ".5"}, :yaml)
-
-      assert error.details == %{expected: ".5", actual: 0.5}
+    test "quotes implicit numeric lookalikes without changing their string type" do
+      data = %{"v" => ".5"}
+      assert {:ok, yaml} = Formata.encode(data, :yaml)
+      assert {:ok, ^data} = Formata.decode(yaml, :yaml)
     end
   end
 end

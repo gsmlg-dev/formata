@@ -6,6 +6,39 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-14
+
+### Fixed
+
+- YAML 1.2 implicit incomplete integers (`+`, `0x`, `0o`) remain strings;
+  invalid explicitly tagged integers return syntax errors. Explicit YAML
+  1.1 documents retain their separate resolution rules.
+- YAML decoding validates mapping keys and values before map construction.
+  Null scalar keys work, duplicate normalized keys are rejected, and complex
+  sequence/mapping keys return an explicit unsupported-key error instead of
+  losing entries or exposing parser records. Encoder key types are unchanged.
+- Quoted `"<<"` and explicitly tagged `!!str <<` remain literal string keys;
+  only the plain implicit merge convention remains unsupported.
+- YAML encoding preserves root `nil`, numeric-looking strings such as `.5`,
+  leading-space multiline strings, CRLF, controls and U+FEFF. Unsafe block
+  values use complete YAML double-quoted escaping. The round-trip guard stays
+  enabled, and the previously skipped leading-space emitter test is enabled.
+- Anchors before flow collections attach to the collection rather than a
+  child or subsequent mapping key.
+- Malformed escapes, raw control characters in flow scalars, and unfinished
+  flow collections return structured syntax errors with source locations.
+
+### Added
+
+- Per-call YAML `max_depth` (default 128) and `max_nodes` (default 100,000)
+  limits, including mapping keys and repeated alias expansions. Decoding
+  uses one detailed parse and bounded validation/conversion. Encoding checks
+  its input and round-trip verification with the same limits.
+- Scoped fixtures from the tagged official YAML Test Suite and independent
+  YAML 1.2 typed-node emission checks using test-only `ruamel.yaml==0.18.16`.
+  See [the YAML review](docs/yaml-correctness-review.md) for compatibility
+  decisions, resource accounting and validation evidence.
+
 ## [0.3.1] - 2026-11-13
 
 ### Fixed

@@ -48,22 +48,23 @@ defmodule Formata.YamlElixir.Mapper do
   defp _tuples_to_map([{key, val} | rest], map, options) do
     agregator_module = maps_aggregator(options)
 
-    case key do
-      {:formata_yamerl_seq, :formata_yamerl_node_seq, _tag, _log, _seq, _n} ->
-        _tuples_to_map(
-          rest,
-          agregator_module.(map, _to_map(key, options), _to_map(val, options)),
-          options
-        )
+    _tuples_to_map(
+      rest,
+      agregator_module.(map, mapping_key(key, options), _to_map(val, options)),
+      options
+    )
+  end
 
-      {_yamler_element, _yamler_node_element, _tag, _log, name} ->
-        _tuples_to_map(
-          rest,
-          agregator_module.(map, key_for(name, options), _to_map(val, options)),
-          options
-        )
+  defp mapping_key({:formata_yamerl_str, _, _, pres, "<<"} = key, options) do
+    if options[:merge_anchors] && pres[:scalar_style] == :plain &&
+         pres[:source_tag] == {:non_specific, ~c"?"} do
+      {:yaml_merge_key, make_ref()}
+    else
+      _to_map(key, options)
     end
   end
+
+  defp mapping_key(key, options), do: _to_map(key, options)
 
   defp key_for(<<?:, name::binary>> = original_name, options) do
     options
@@ -71,7 +72,6 @@ defmodule Formata.YamlElixir.Mapper do
     |> maybe_atom(name, original_name)
   end
 
-  defp key_for("<<", _options), do: "<<#{System.unique_integer([:positive, :monotonic])}"
   defp key_for(name, _options), do: name
 
   defp maybe_atom(true, name, _original_name), do: String.to_atom(name)
@@ -109,7 +109,7 @@ defmodule Formata.YamlElixir.Mapper do
   defp merge_anchors(map) when is_map(map) do
     map
     |> Enum.reduce(%{}, fn
-      {<<"<<", _::binary>>, v}, acc -> acc |> Map.merge(v)
+      {{:yaml_merge_key, _}, v}, acc -> acc |> Map.merge(v)
       {k, v}, acc -> acc |> Map.put(k, merge_anchors(v))
     end)
   end

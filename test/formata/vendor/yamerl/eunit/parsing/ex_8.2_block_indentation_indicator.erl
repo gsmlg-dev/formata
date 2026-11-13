@@ -49,7 +49,8 @@ single_test_() ->
           {formata_yamerl_collection_end,12,1,block,sequence},
           {formata_yamerl_scalar,9,3,
             {formata_yamerl_tag,9,3,{non_specific,"!"}},
-            block,folded,"\t detected\n"},
+            % A tab starts more-indented content; YAML preserves its line break.
+            block,folded,"\t\ndetected\n"},
           {formata_yamerl_sequence_entry,9,1},
           {formata_yamerl_scalar,7,3,
             {formata_yamerl_tag,7,3,{non_specific,"!"}},

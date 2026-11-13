@@ -54,6 +54,7 @@ defmodule Formata.MixProject do
         "README.md",
         "docs/design.md",
         "docs/toml-correctness-review.md",
+        "docs/yaml-correctness-review.md",
         "docs/release.md",
         "CHANGELOG.md",
         "NOTICE.md",

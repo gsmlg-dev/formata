@@ -63,3 +63,11 @@ TOML authors). See `test/fixtures/toml-test/PROVENANCE.md` for the file list
 and license text. Fixtures for the forked packages' own test suites are
 described by the `PROVENANCE.md` file in each `test/fixtures/<package>/`
 directory. Test fixtures are not included in the Hex package.
+
+`test/fixtures/yaml-test-suite/` contains 21 scoped leaf cases from the
+official [YAML Test Suite](https://github.com/yaml/yaml-test-suite), pinned
+to the generated `data-2022-01-17` release, commit
+`6e6c296ae9c9d2d5c4134b4b64d01b29ac19ff6f`. They are MIT licensed,
+Copyright (c) 2016-2020 Ingy döt Net. The selection, numbered subtests,
+profile exclusions, and license are recorded in that directory's
+`PROVENANCE.md` and `LICENSE`.

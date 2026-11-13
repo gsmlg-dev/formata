@@ -144,12 +144,16 @@ tests) and are not part of the public API.
   assignment/comment, numeric underscore, date-time separator, and UTF-8
   encoding-key fixes, with deterministic boundary coverage. Historical
   upstream issue state is independent of fixes maintained in this fork.
-* YAML: `Formata.YamlElixir.read_from_string/2` silently returns the last document,
-  keeps the first duplicate key, renames `<<` keys, and maps a null root to
-  `%{}`. Formata uses `read_all_from_string/2` and inspects yamerl's detailed
-  node tree. `Formata.Ymlr` leaves some strings unquoted that read back as numbers
-  (for example `".5"`), so YAML output is decoded and compared before it is
-  returned.
+* YAML: the facade uses one detailed parse preserving duplicate entries and
+  source scalar metadata. Constructor/parser limits bound pending nesting
+  and expanded aliases before a fused validation/conversion pass creates
+  maps. Plain implicit merge keys and complex keys are explicitly rejected;
+  quoted/string-tagged `<<` is preserved. Scalar key types remain distinct.
+  The emitter quotes implicit numeric lookalikes and uses YAML escaping when
+  block scalar normalization would alter a string. Every output is still
+  decoded and compared, with the caller's limits. See the
+  [YAML review](yaml-correctness-review.md) for accounting, schema decisions,
+  independent checks and the pinned official fixture selection.
 * JSON decode options (`comments`, `trailing_commas`): see "JSON extensions"
   below.
 * Special floats use the atoms produced by `Formata.Toml`

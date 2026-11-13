@@ -237,7 +237,7 @@ defmodule Formata.Vendor.YamlElixirTest do
   end
 
   test "should get error tuple for invalid file" do
-    path = test_data("invalid")
+    path = test_data("unclosed_flow")
 
     assert {:error, %Formata.YamlElixir.ParsingError{}} =
              Formata.YamlElixir.read_all_from_file(path)
@@ -246,11 +246,18 @@ defmodule Formata.Vendor.YamlElixirTest do
   end
 
   test "bang function should raise exception for invalid file" do
-    path = test_data("invalid")
+    path = test_data("unclosed_flow")
 
-    assert_raise Formata.YamlElixir.ParsingError, "malformed yaml", fn ->
-      Formata.YamlElixir.read_all_from_file!(path)
-    end
+    error =
+      assert_raise Formata.YamlElixir.ParsingError, fn ->
+        Formata.YamlElixir.read_all_from_file!(path)
+      end
+
+    assert error.type == :unfinished_flow_collection
+  end
+
+  test "the historical colon-only fixture is a valid null-key mapping" do
+    assert_parse_file("invalid", %{nil => nil})
   end
 
   test "should get file error tuple for non-existent file" do

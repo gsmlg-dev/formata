@@ -4,8 +4,21 @@ defmodule Formata.YamlElixir do
   @yamerl_options [
     detailed_constr: true,
     str_node_as_binary: true,
-    keep_duplicate_keys: true
+    keep_duplicate_keys: true,
+    preserve_scalar_metadata: true
   ]
+
+  @doc false
+  # Retain the detailed tree for validation before Mapper can discard entries.
+  def read_nodes_from_string(string, options \\ []) do
+    {:ok, :formata_yamerl_constr.string(string, merge_options(options))}
+  catch
+    {:formata_yamerl_exception, [error | _]} ->
+      {:error, Formata.YamlElixir.ParsingError.from_yamerl(error)}
+
+    {:formata_yamerl_parsing_error, _, _, _, _, _, _, _} = error ->
+      {:error, Formata.YamlElixir.ParsingError.from_yamerl(error)}
+  end
 
   def read_all_from_file!(path, options \\ []) do
     case read_all_from_file(path, options) do

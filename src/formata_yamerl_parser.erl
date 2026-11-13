@@ -177,9 +177,9 @@
     C == $,)).
 
 -define(IS_HEXADECIMAL(C), (
-    (O1 >= $0 andalso O1 =< $9) orelse
-    (O1 >= $a andalso O1 =< $f) orelse
-    (O1 >= $A andalso O1 =< $F)
+    (C >= $0 andalso C =< $9) orelse
+    (C >= $a andalso C =< $f) orelse
+    (C >= $A andalso C =< $F)
   )).
 
 -define(IS_URI_CHAR(C),
@@ -971,7 +971,9 @@ end_doc(Parser, Line, Col, Insert_At) ->
               line   = Line,
               column = Col
             },
-            add_error(Parser2, Error, "Unfinished flow collection", [])
+            %% Do not emit document-end or pending-entry tokens from an
+            %% unfinished collection into the constructor's partial tree.
+            do_return(add_error(Parser2, Error, "Unfinished flow collection", []))
     end,
     queue_token(Parser3, Token, Insert_At).
 
@@ -1734,6 +1736,11 @@ parse_mapping_value(Chars, Line, Col, Delta,
     Parser1 = queue_impl_key(Delta, Parser),
     queue_mapping_value_token(Chars, Line, Col, Delta, Parser1);
 
+parse_mapping_value(Chars, Line, Col, Delta,
+  #formata_yamerl_parser{ik_allowed = true, cur_coll = #bcoll{kind = root}} = Parser) ->
+    Token = #formata_yamerl_mapping_key{line = Line, column = Col},
+    Parser1 = queue_token(Parser, Token),
+    queue_mapping_value_token(Chars, Line, Col, Delta, Parser1);
 parse_mapping_value(Chars, Line, Col, Delta,
   #formata_yamerl_parser{ik_allowed = true,
     cur_coll = #bcoll{kind = mapping, kidx = KIdx, vidx = VIdx}} = Parser)
@@ -2693,6 +2700,8 @@ do_parse_block_scalar([C | Rest], Line, Col, Delta, Parser,
       spaces  = "",
       newline = false,
       output  = Output1,
+      more_indent = Ctx#block_scalar_ctx.more_indent orelse
+        (Newline andalso ?IS_SPACE(C)),
       endline = Line,
       endcol  = Col1
     },
@@ -2986,9 +2995,19 @@ do_parse_flow_scalar([C | _] = Chars, Line, Col, Delta, Parser,
     queue_flow_scalar_token(Chars, Line, Col, Delta, Parser,
       Ctx#flow_scalar_ctx{spaces = ""});
 
+do_parse_flow_scalar([Marker, Marker, Marker, C | _], Line, 1, _Delta,
+  #formata_yamerl_parser{doc_version = Version}, #flow_scalar_ctx{style = Style})
+  when Style =/= plain andalso (Marker == $- orelse Marker == $.) andalso
+  (?IS_SPACE(C) orelse ?IS_NEWLINE(C) orelse
+   (Version == {1,1} andalso ?IS_NEWLINE_11(C))) ->
+    quoted_document_marker(Line);
+do_parse_flow_scalar([Marker, Marker, Marker], Line, 1, _Delta,
+  #formata_yamerl_parser{raw_eos = true}, #flow_scalar_ctx{style = Style})
+  when Style =/= plain andalso (Marker == $- orelse Marker == $.) ->
+    quoted_document_marker(Line);
 do_parse_flow_scalar([C | _] = Chars, Line, 1 = Col, Delta,
   #formata_yamerl_parser{chars_len = Len, raw_eos = false} = Parser,
-  #flow_scalar_ctx{style = plain} = Ctx)
+  #flow_scalar_ctx{} = Ctx)
   when (C == $- orelse C == $.) andalso (Len - Delta) < 4 ->
     %% We don't have enough data to determine if it's the end of the
     %% plain scalar.
@@ -3062,6 +3081,21 @@ do_parse_flow_scalar([C | Rest] = Chars, Line, Col, Delta, Parser,
     },
     do_parse_flow_scalar(Rest, Line, Col1, Delta1, Parser1, Ctx1);
 
+do_parse_flow_scalar([C | _], Line, Col, _Delta, _Parser,
+  #flow_scalar_ctx{style = Style, line = Sc_Line, col = Sc_Col, output = Output})
+  when C < 16#20 ->
+    %% TAB and line breaks have already been handled. Remaining raw C0
+    %% controls must be escaped, even in quoted scalars.
+    Token = #formata_yamerl_scalar{
+      style = flow, substyle = Style, text = lists:reverse(Output),
+      line = Sc_Line, column = Sc_Col,
+      tag = ?FLOW_SCALAR_DEFAULT_TAG(Sc_Line, Sc_Col)
+    },
+    formata_yamerl_errors:throw(#formata_yamerl_parsing_error{
+      name = invalid_character, text = "Unescaped control character in flow scalar",
+      line = Line, column = Col, token = Token
+    });
+
 do_parse_flow_scalar([] = Chars, Line, Col, Delta,
   #formata_yamerl_parser{raw_eos = true} = Parser,
   #flow_scalar_ctx{style = Style, line = Sc_Line, col = Sc_Col,
@@ -3097,6 +3131,16 @@ do_parse_flow_scalar([] = Chars, Line, Col, Delta, Parser, Ctx) ->
 %%
 
 %% Escaped 16-bit Unicode character, \uFFFF [60].
+quoted_document_marker(Line) ->
+    formata_yamerl_errors:throw(#formata_yamerl_parsing_error{
+      name = unexpected_document_indicator, text = "Document marker inside quoted scalar",
+      line = Line, column = 1
+    }).
+
+do_parse_flow_scalar_escaped([C | _], Line, Col, _Delta, _Parser,
+  #flow_scalar_ctx{surrogate = High} = Ctx)
+  when High /= undefined andalso C /= $u andalso C /= $U ->
+    invalid_unicode_escape(invalid_surrogate_pair, Line, Col, Ctx);
 do_parse_flow_scalar_escaped([$u | _] = Chars, Line, Col, Delta,
   #formata_yamerl_parser{chars_len = Len, raw_eos = true} = Parser,
   #flow_scalar_ctx{style = Style, line = Sc_Line, col = Sc_Col,
@@ -3132,6 +3176,7 @@ do_parse_flow_scalar_escaped([$u, O1, O2, O3, O4 | Rest], Line, Col, Delta,
   ?IS_HEXADECIMAL(O3) andalso ?IS_HEXADECIMAL(O4) ->
     {Col1, Delta1} = ?NEXT_COL(Col, Delta, 5),
     C    = hex_to_dec([O1, O2, O3, O4], 0),
+    check_escaped_unicode(C, High, Line, Col, Ctx),
     Ctx1 = case High of
         undefined ->
             if
@@ -3176,7 +3221,6 @@ do_parse_flow_scalar_escaped([$u | _] = Chars, Line, Col, Delta, Parser,
     },
     Error  = #formata_yamerl_parsing_error{
       name   = invalid_escaped_character,
-      type   = warning,
       token  = Token,
       line   = Line,
       column = Col - 1
@@ -3223,6 +3267,7 @@ do_parse_flow_scalar_escaped([$U, O1, O2, O3, O4, O5, O6, O7, O8 | Rest],
   ?IS_HEXADECIMAL(O7) andalso ?IS_HEXADECIMAL(O8) ->
     {Col1, Delta1} = ?NEXT_COL(Col, Delta, 9),
     C    = hex_to_dec([O1, O2, O3, O4, O5, O6, O7, O8], 0),
+    check_escaped_unicode(C, High, Line, Col, Ctx),
     Ctx1 = case High of
         undefined ->
             if
@@ -3267,7 +3312,6 @@ do_parse_flow_scalar_escaped([$U | _] = Chars, Line, Col, Delta, Parser,
     },
     Error  = #formata_yamerl_parsing_error{
       name   = invalid_escaped_character,
-      type   = warning,
       token  = Token,
       line   = Line,
       column = Col - 1
@@ -3328,7 +3372,6 @@ do_parse_flow_scalar_escaped([$x | _] = Chars, Line, Col, Delta, Parser,
     },
     Error  = #formata_yamerl_parsing_error{
       name   = invalid_escaped_character,
-      type   = warning,
       token  = Token,
       line   = Line,
       column = Col - 1
@@ -3373,7 +3416,6 @@ do_parse_flow_scalar_escaped([C | Rest] = Chars, Line, Col, Delta, Parser,
             },
             Error  = #formata_yamerl_parsing_error{
               name   = invalid_escaped_character,
-              type   = warning,
               token  = Token,
               line   = Line,
               column = Col - 1
@@ -3413,6 +3455,34 @@ do_parse_flow_scalar_escaped([] = Chars, Line, Col, Delta,
 do_parse_flow_scalar_escaped([] = Chars, Line, Col, Delta, Parser, Ctx) ->
     suspend_parsing(Chars, Line, Col, Delta, Parser,
       fun do_parse_flow_scalar_escaped/6, Ctx).
+
+%% Keep the existing UTF-16 pair support, but never emit isolated low
+%% surrogates or values outside Unicode's range into string construction.
+check_escaped_unicode(C, undefined, _Line, _Col, _Ctx)
+  when C =< 16#10ffff andalso not ?IS_LOW_SURROGATE(C) ->
+    ok;
+check_escaped_unicode(C, High, _Line, _Col, _Ctx)
+  when High /= undefined andalso ?IS_LOW_SURROGATE(C) ->
+    ok;
+check_escaped_unicode(_C, undefined, Line, Col, Ctx) ->
+    invalid_unicode_escape(invalid_escaped_character, Line, Col, Ctx);
+check_escaped_unicode(_C, _High, Line, Col, Ctx) ->
+    invalid_unicode_escape(invalid_surrogate_pair, Line, Col, Ctx).
+
+invalid_unicode_escape(Name, Line, Col,
+  #flow_scalar_ctx{style = Style, line = Sc_Line, col = Sc_Col, output = Output}) ->
+    Token = #formata_yamerl_scalar{
+      style = flow, substyle = Style, text = lists:reverse(Output),
+      line = Sc_Line, column = Sc_Col,
+      tag = ?FLOW_SCALAR_DEFAULT_TAG(Sc_Line, Sc_Col)
+    },
+    Text = case Name of
+        invalid_surrogate_pair -> "Invalid UTF-16 surrogate pair";
+        invalid_escaped_character -> "Invalid escaped Unicode character"
+    end,
+    formata_yamerl_errors:throw(#formata_yamerl_parsing_error{
+      name = Name, text = Text, token = Token, line = Line, column = Col - 1
+    }).
 
 queue_flow_scalar_token(Chars, Line, Col, Delta, Parser,
   #flow_scalar_ctx{style = Style, output = Output, spaces = Spaces,
@@ -3868,8 +3938,9 @@ queue_token_json_like(Parser, Token, Insert_At) ->
 %% Insert the token at the end of the queue or a given index.
 %%
 
-do_queue_token(#formata_yamerl_parser{tokens = Tokens, tks_queued = Queued} = Parser,
+do_queue_token(#formata_yamerl_parser{tokens = Tokens, tks_queued = Queued} = Parser0,
   Token, tail) ->
+    Parser = reserve_token(Parser0, Token),
     Tokens1 = [Token | Tokens],
     Parser1 = Parser#formata_yamerl_parser{
       tokens     = Tokens1,
@@ -3877,8 +3948,9 @@ do_queue_token(#formata_yamerl_parser{tokens = Tokens, tks_queued = Queued} = Pa
     },
     emit_tokens(Parser1);
 do_queue_token(#formata_yamerl_parser{tokens = Tokens, tks_queued = Queued,
-    tks_first_idx = First} = Parser,
+    tks_first_idx = First} = Parser0,
   Token, Insert_At) ->
+    Parser = reserve_token(Parser0, Token),
     Split        = Queued - (Insert_At - First),
     {Head, Tail} = lists:split(Split, Tokens),
     Parser1 = Parser#formata_yamerl_parser{
@@ -3886,6 +3958,42 @@ do_queue_token(#formata_yamerl_parser{tokens = Tokens, tks_queued = Queued,
       tks_queued = Queued + 1
     },
     emit_tokens(Parser1).
+
+%% Bound pending parser state even when an implicit collection key delays
+%% constructor callbacks. These limits do not expand aliases; the constructor
+%% separately charges their cached expanded subtree sizes.
+reserve_token(#formata_yamerl_parser{options = Options, parent_colls = Colls} = Parser, Token) ->
+    case Token of
+        #formata_yamerl_collection_start{} ->
+            parser_limit(Token, max_depth, length(Colls) + 1,
+              proplists:get_value(max_parser_depth, Options, infinity));
+        _ -> ok
+    end,
+    case is_record(Token, formata_yamerl_collection_start) orelse
+      is_record(Token, formata_yamerl_scalar) orelse
+      is_record(Token, formata_yamerl_alias) of
+        true ->
+            case proplists:get_value(max_parser_nodes, Options, infinity) of
+                infinity -> Parser;
+                Max ->
+                    Count = proplists:get_value(parser_node_count, Options, 0),
+                    parser_limit(Token, max_nodes, Count + 1, Max),
+                    Options1 = lists:keystore(parser_node_count, 1, Options,
+                      {parser_node_count, Count + 1}),
+                    Parser#formata_yamerl_parser{options = Options1}
+            end;
+        false -> Parser
+    end.
+
+parser_limit(_, _, _, infinity) -> ok;
+parser_limit(_, _, Actual, Max) when Actual =< Max -> ok;
+parser_limit(Token, Name, Actual, Max) ->
+    Error = #formata_yamerl_parsing_error{
+      name = limit_exceeded, text = "YAML parser node or nesting limit exceeded",
+      line = ?TOKEN_LINE(Token), column = ?TOKEN_COLUMN(Token), token = Token,
+      extra = [{limit, Name}, {max, Max}, {actual, Actual}, {phase, parser}]
+    },
+    formata_yamerl_errors:throw(Error).
 
 %%
 %% Emit tokens which are ready using the callback function.
@@ -4060,6 +4168,10 @@ handle_anchor_property(
   #formata_yamerl_parser{last_anchor = Anchor} = Parser, Token) when
   (is_record(Token, formata_yamerl_collection_start) andalso
    Anchor#formata_yamerl_anchor.line < Token#formata_yamerl_collection_start.line) orelse
+  (is_record(Token, formata_yamerl_collection_start) andalso
+   Token#formata_yamerl_collection_start.style =:= flow andalso
+   Anchor#formata_yamerl_anchor.line == Token#formata_yamerl_collection_start.line andalso
+   Anchor#formata_yamerl_anchor.column =< Token#formata_yamerl_collection_start.column) orelse
   (is_record(Token, formata_yamerl_scalar) andalso
    (Anchor#formata_yamerl_anchor.line < Token#formata_yamerl_scalar.line orelse
     (Anchor#formata_yamerl_anchor.line == Token#formata_yamerl_scalar.line andalso
@@ -4266,6 +4378,8 @@ option_names() ->
       default_tags,
       doc_version,
       io_blocksize,
+      max_parser_depth,
+      max_parser_nodes,
       token_fun
     ].
 
@@ -4277,6 +4391,8 @@ check_options([Option | Rest]) ->
 check_options([]) ->
     ok.
 
+is_option_valid({max_parser_depth, N}) when is_integer(N), N > 0 -> true;
+is_option_valid({max_parser_nodes, N}) when is_integer(N), N > 0 -> true;
 is_option_valid({default_tags, List}) when is_list(List) ->
     %% This fun() returns true for any invalid entries, to keep only
     %% those.

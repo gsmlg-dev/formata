@@ -4,7 +4,7 @@ defmodule Formata.YamlElixir.FileNotFoundError do
 end
 
 defmodule Formata.YamlElixir.ParsingError do
-  defexception [:line, :column, :type, message: "parsing error"]
+  defexception [:line, :column, :type, message: "parsing error", details: %{}]
 
   @type t :: %__MODULE__{
           line: integer() | nil,
@@ -22,13 +22,14 @@ defmodule Formata.YamlElixir.ParsingError do
 
   def from_yamerl(
         {:formata_yamerl_parsing_error, :error, human_readable_error, line, column, error_type,
-         _token_being_parsed, _}
+         _token_being_parsed, extra}
       ) do
     %__MODULE__{
       message: to_string(human_readable_error),
       line: line,
       column: column,
-      type: error_type
+      type: error_type,
+      details: Map.new(extra)
     }
   end
 

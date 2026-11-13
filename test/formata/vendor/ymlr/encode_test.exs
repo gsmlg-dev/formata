@@ -220,12 +220,9 @@ defmodule Formata.Vendor.YmlrEncodeTest do
     test "quoted strings - example-escaped-characters from 1.2.2 spec" do
       assert_identity_and_output(~S(Fun with \\), ~S(Fun with \\))
       assert_identity_and_output("\" \u0007 \b \u001b \f", ~S("\" \a \b \e \f"))
-      # Line breaks inside scalar content must be normalized by the YAML processor.
-      # Each such line break must be parsed into a single line feed character.
-      # The original line break format is a presentation detail and must not be
-      # used to convey content information.
-      # I.e. the following cannot be tested for identity as \r will be parsed as \n.
-      assert_output("\n\r \t \u000b \u0000", "|-\n\n  \r \t \v \0")
+      # Escape line breaks and controls rather than letting block scalar
+      # normalization change their values or emit invalid raw characters.
+      assert_identity_and_output("\n\r \t \u000b \u0000", ~s("\\n\\r \t \\v \\0"))
       assert_identity_and_output("\r \t \u000b \u0000", ~s("\\r \t \\v \\0"))
 
       assert_identity_and_output(
@@ -306,7 +303,7 @@ defmodule Formata.Vendor.YmlrEncodeTest do
         "7e0981ff4c0daa3a47db5542ad5c167176145ef65f597a7f94ba2f5b41d35718"
       )
 
-      assert_identity_and_output("1.7976931348623157e+309", "1.7976931348623157e+309")
+      assert_identity_and_output("1.7976931348623157e+309", "'1.7976931348623157e+309'")
     end
 
     test "lists" do
@@ -433,10 +430,9 @@ defmodule Formata.Vendor.YmlrEncodeTest do
     end
 
     # see https://yaml-multiline.info/
-    @tag skip: "still buggy"
     test "multiline strings - starting with spaces" do
-      assert_identity_and_output("\n   abc", "|-\n\n     abc")
-      assert_identity_and_output("   abc\nabc", "|-\n     abc\n  abc")
+      assert_identity_and_output("\n   abc", ~S("\n   abc"))
+      assert_identity_and_output("   abc\nabc", ~S("   abc\nabc"))
     end
 
     test "multiline strings - base cases" do

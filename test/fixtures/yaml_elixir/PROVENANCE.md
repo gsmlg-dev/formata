@@ -5,3 +5,8 @@
 - License: MIT (Copyright (c) 2017 Kamil Lelonek)
 - Files: `*.yml` ← `test/fixtures/*.yml` (used by `test/formata/vendor/yaml_elixir/yaml_elixir_test.exs`)
 - Modified: no (files copied byte-for-byte; only their location changed).
+
+`unclosed_flow.yml` is an additional Formata regression fixture, not an
+upstream copy. It preserves the invalid-file tests after the original
+`invalid.yml` (a lone `:`) was correctly recognized as a null-key/null-value
+mapping. The original file remains unchanged and is tested as valid YAML.

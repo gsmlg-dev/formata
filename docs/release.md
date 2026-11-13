@@ -4,6 +4,13 @@ Releases are cut from `main` by a maintainer with Hex and GitHub credentials.
 
 ## Gate
 
+The independent YAML checks require test-only `ruamel.yaml==0.18.16`.
+Install it in a Python virtual environment and set
+`FORMATA_YAML_REFERENCE_PYTHON` to that environment's interpreter, or install
+the pinned version for `python3`. CI and Release install the same pin; it is
+not a Formata runtime dependency. Python 3.11+ is also required for the
+existing independent TOML `tomllib` checks.
+
 All of these must pass on the commit to release:
 
 ```sh

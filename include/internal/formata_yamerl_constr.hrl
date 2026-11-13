@@ -68,7 +68,10 @@
                                           #node_anchor{}]
                                        | undefined,
     current_node_is_leaf = false      :: boolean(),
-    anchors              = dict:new() :: dict:dict(term(), term())
+    anchors              = dict:new() :: dict:dict(term(), term()),
+    node_stats           = []         :: [{pos_integer(), pos_integer()}],
+    last_node_stats      = {0, 0}     :: {non_neg_integer(), non_neg_integer()},
+    expanded_nodes       = 0          :: non_neg_integer()
   }).
 
 -endif.

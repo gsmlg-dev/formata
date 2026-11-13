@@ -101,6 +101,7 @@
     next_chunk/2,
     last_chunk/2,
     get_pres_details/1,
+    get_pres_details/2,
     node_line/1,
     node_column/1,
     option_names/0
@@ -537,6 +538,15 @@ get_pres_details(Token) ->
     Column = ?TOKEN_COLUMN(Token),
     [{line, Line}, {column, Column}].
 
+%% Optional source metadata used by the facade before any lossy mapping.
+get_pres_details(#formata_yamerl_scalar{tag = Tag, substyle = Style} = Token,
+  #formata_yamerl_constr{ext_options = Options}) ->
+    Pres = get_pres_details(Token),
+    case proplists:get_value(preserve_scalar_metadata, Options, false) of
+        true -> Pres ++ [{scalar_style, Style}, {source_tag, Tag#formata_yamerl_tag.uri}];
+        false -> Pres
+    end.
+
 %% -------------------------------------------------------------------
 %% Node information.
 %% -------------------------------------------------------------------
@@ -591,7 +601,18 @@ node_pres(Node) when is_tuple(Node) ->
 %% Construction.
 %% -------------------------------------------------------------------
 
-construct(Constr, #formata_yamerl_doc_start{version = Version}) ->
+construct(#formata_yamerl_constr{docs_count = Count, options = Options} = Constr,
+  #formata_yamerl_doc_start{version = Version} = Token) ->
+    case proplists:get_value(max_documents, Options, infinity) of
+        Max when is_integer(Max), Count >= Max ->
+            Error = #formata_yamerl_parsing_error{
+              name = multiple_documents, text = "Expected a single YAML document",
+              line = ?TOKEN_LINE(Token), column = ?TOKEN_COLUMN(Token), token = Token,
+              extra = [{count, Count + 1}]
+            },
+            formata_yamerl_errors:throw(Error);
+        _ -> ok
+    end,
     %% Select schema and associated modules, possibly based on the
     %% document version.
     Constr1 = setup_node_mods(Constr, Version),
@@ -624,20 +645,21 @@ construct(
         #formata_yamerl_collection_start{tag = T} -> T;
         #formata_yamerl_scalar{tag = T}           -> T
     end,
+    Constr1 = enter_node(Constr, Token, {1, 1}),
     Ret = case Tag of
         #formata_yamerl_tag{uri = {non_specific, _}} ->
             %% The node has a non-specific tag. We let each module
             %% decides if they want to construct the node.
-            try_construct(Constr, Mods, Token);
+            try_construct(Constr1, Mods, Token);
         #formata_yamerl_tag{uri = URI} ->
             %% We look up this URI in the tag's index.
             IgnoreUnrecognizedTags = proplists:get_value(
               ignore_unrecognized_tags, Constr#formata_yamerl_constr.options, false),
             case proplists:get_value(URI, Tags) of
                 Mod when Mod /= undefined ->
-                    Mod:construct_token(Constr, undefined, Token);
+                    Mod:construct_token(Constr1, undefined, Token);
                 undefined when IgnoreUnrecognizedTags ->
-                    try_construct(Constr, Mods, Token);
+                    try_construct(Constr1, Mods, Token);
                 undefined ->
                     %% This tag isn't handled by anything!
                     Error = #formata_yamerl_parsing_error{
@@ -651,7 +673,7 @@ construct(
                     formata_yamerl_errors:throw(Error1)
             end
     end,
-    handle_construct_return(Constr, Doc, Ret);
+    handle_construct_return(Constr1, Doc, Ret);
 
 construct(
   #formata_yamerl_constr{current_doc = Doc, current_node_is_leaf = false} = Constr,
@@ -661,12 +683,13 @@ construct(
 construct(
   #formata_yamerl_constr{current_doc = Doc, anchors = Anchors} = Constr,
   #formata_yamerl_alias{name = Alias} = Token) when Doc /= undefined ->
-    try
-        Node = dict:fetch(Alias, Anchors),
-        handle_construct_return(Constr, Doc, {finished, Node})
-    catch
-        _:_ ->
-            %% This alias references a non-existent anchor!
+    case dict:find(Alias, Anchors) of
+        {ok, {Node, Stats}} ->
+            %% Charge the whole referenced subtree before attaching it. Never
+            %% traverse the alias graph to calculate its size.
+            Constr1 = enter_node(Constr, Token, Stats),
+            handle_construct_return(Constr1, Doc, {finished, alias_node(Node, Token, Constr)});
+        error ->
             Error = #formata_yamerl_parsing_error{
               name   = no_matching_anchor,
               token  = Token,
@@ -704,7 +727,7 @@ try_construct(_, [], Token) ->
 
 construct_parent(#formata_yamerl_constr{anchors = Anchors} = Constr,
   [#node_anchor{name = Anchor} | Doc], Child) ->
-    Anchors1 = dict:store(Anchor, Child, Anchors),
+    Anchors1 = dict:store(Anchor, {Child, Constr#formata_yamerl_constr.last_node_stats}, Anchors),
     Constr1  = Constr#formata_yamerl_constr{
       anchors = Anchors1
     },
@@ -731,7 +754,7 @@ construct_parent(Constr, [#unfinished_node{module = Mod} = Node | Doc],
 
 handle_construct_return(Constr, Doc, {finished, Node}) ->
     %% Give this node to the parent node.
-    construct_parent(Constr, Doc, Node);
+    construct_parent(finish_node(Constr), Doc, Node);
 handle_construct_return(Constr, Doc, {unfinished, Node, Is_Leaf}) ->
     %% Unfinished node, wait for the next tokens.
     Constr1 = Constr#formata_yamerl_constr{
@@ -745,6 +768,63 @@ handle_construct_return(Constr, Doc, #node_anchor{} = Anchor) ->
       current_doc = [Anchor | Doc]
     },
     return_new_fun(Constr1).
+
+alias_node(Node, Token, #formata_yamerl_constr{ext_options = Options}) ->
+    case proplists:get_value(preserve_scalar_metadata, Options, false) of
+        true ->
+            Pres = ?NODE_PRES(Node),
+            Rest = proplists:delete(line, proplists:delete(column, Pres)),
+            setelement(4, Node, get_pres_details(Token) ++ Rest);
+        false -> Node
+    end.
+
+%% Root depth is zero. Keys and values are both nodes. The count is
+%% cumulative across documents and charges every repeated alias occurrence.
+enter_node(#formata_yamerl_constr{node_stats = Stack, expanded_nodes = Count,
+  options = Options} = Constr, Token, {Weight, Height} = Stats) ->
+    Depth = length(Stack) + Height - 1,
+    check_limit(Constr, Token, max_depth, Depth,
+      proplists:get_value(max_depth, Options, infinity)),
+    check_limit(Constr, Token, max_nodes, Count + Weight,
+      proplists:get_value(max_nodes, Options, infinity)),
+    Constr#formata_yamerl_constr{
+      node_stats = [Stats | Stack], expanded_nodes = Count + Weight}.
+
+finish_node(#formata_yamerl_constr{node_stats = [{Weight, Height} = Stats | Rest]} = Constr) ->
+    Stack = case Rest of
+        [{ParentWeight, ParentHeight} | Tail] ->
+            [{ParentWeight + Weight, max(ParentHeight, Height + 1)} | Tail];
+        [] -> []
+    end,
+    Constr#formata_yamerl_constr{node_stats = Stack, last_node_stats = Stats}.
+
+check_limit(_, _, _, _, infinity) -> ok;
+check_limit(_, _, _, Actual, Max) when Actual =< Max -> ok;
+check_limit(Constr, Token, Name, Actual, Max) ->
+    Error = #formata_yamerl_parsing_error{
+      name = limit_exceeded,
+      text = "YAML expanded-node or nesting limit exceeded",
+      line = ?TOKEN_LINE(Token), column = ?TOKEN_COLUMN(Token), token = Token,
+      extra = [{limit, Name}, {max, Max}, {actual, Actual},
+        {path, budget_path(Constr#formata_yamerl_constr.current_doc)}]
+    },
+    formata_yamerl_errors:throw(Error).
+
+budget_path(Doc) -> lists:reverse(lists:filtermap(fun
+    (#unfinished_node{path = {seq, Count}}) when Count > 0 -> {true, Count - 1};
+    (#unfinished_node{path = {map, Key}}) when Key =/= undefined ->
+        case Key of
+            #formata_yamerl_null{} -> {true, nil};
+            #formata_yamerl_str{text = Value} -> {true, Value};
+            #formata_yamerl_int{value = Value} -> {true, Value};
+            #formata_yamerl_bool{value = Value} -> {true, Value};
+            #formata_yamerl_float{value = '+inf'} -> {true, infinity};
+            #formata_yamerl_float{value = '-inf'} -> {true, negative_infinity};
+            #formata_yamerl_float{value = Value} -> {true, Value};
+            _ -> false
+        end;
+    (_) -> false
+  end, Doc)).
 
 return_new_fun(#formata_yamerl_constr{detailed_constr = Detailed} = Constr) ->
     Fun = fun
@@ -884,6 +964,9 @@ option_names() ->
       node_mods,
       schema,
       detailed_constr,
+      max_depth,
+      max_nodes,
+      max_documents,
       ignore_unrecognized_tags
     ].
 
@@ -895,6 +978,9 @@ check_options([Option | Rest]) ->
 check_options([]) ->
     ok.
 
+is_option_valid({max_documents, N}) when is_integer(N), N > 0 -> true;
+is_option_valid({max_depth, N}) when is_integer(N), N >= 0 -> true;
+is_option_valid({max_nodes, N}) when is_integer(N), N > 0 -> true;
 is_option_valid({detailed_constr, Flag}) when is_boolean(Flag) ->
     true;
 is_option_valid({node_mods, Mods}) when is_list(Mods) ->

@@ -57,6 +57,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: python3 -m pip install ruamel.yaml==0.18.16
 
       - name: Set version in mix.exs
         id: bump

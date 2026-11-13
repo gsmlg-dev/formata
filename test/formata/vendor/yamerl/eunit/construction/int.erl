@@ -56,6 +56,7 @@ schema_failsafe_int_json_simple_test_() ->
       ]
     }.
 
+% YAML 1.2 core permits signs only on decimal integers (section 10.3.2).
 schema_failsafe_int_simple_test_() ->
     {setup,
       fun setup/0,
@@ -66,9 +67,9 @@ schema_failsafe_int_simple_test_() ->
               0, 0, 0,
               123, 123, -123,
               "0b101", "+0b101", "-0b101",
-              83, 83, -83,
+              83, "+0o123", "-0o123",
               123, 123, -123,
-              427, 427, -427,
+              427, "+0x1aB", "-0x1aB",
               "123:1:23", "+123:1:23", "-123:1:23",
               "1_234", "0b10_10", "0o12_34", "012_34", "0xc3_A9", "1_234:56:8",
               "Not an int", "+Not an int", "-Not an int"
@@ -366,12 +367,12 @@ schema_failsafe_int_detailed_test_() ->
                   {formata_yamerl_int,formata_yamerl_node_int,"tag:yaml.org,2002:int",
                     [{line,13},{column,4}],
                     83},
-                  {formata_yamerl_int,formata_yamerl_node_int,"tag:yaml.org,2002:int",
+                  {formata_yamerl_str,formata_yamerl_node_str,"tag:yaml.org,2002:str",
                     [{line,14},{column,3}],
-                    83},
-                  {formata_yamerl_int,formata_yamerl_node_int,"tag:yaml.org,2002:int",
+                    "+0o123"},
+                  {formata_yamerl_str,formata_yamerl_node_str,"tag:yaml.org,2002:str",
                     [{line,15},{column,3}],
-                    -83},
+                    "-0o123"},
                   {formata_yamerl_int,formata_yamerl_node_int,"tag:yaml.org,2002:int",
                     [{line,17},{column,4}],
                     123},
@@ -384,12 +385,12 @@ schema_failsafe_int_detailed_test_() ->
                   {formata_yamerl_int,formata_yamerl_node_int,"tag:yaml.org,2002:int",
                     [{line,21},{column,4}],
                     427},
-                  {formata_yamerl_int,formata_yamerl_node_int,"tag:yaml.org,2002:int",
+                  {formata_yamerl_str,formata_yamerl_node_str,"tag:yaml.org,2002:str",
                     [{line,22},{column,3}],
-                    427},
-                  {formata_yamerl_int,formata_yamerl_node_int,"tag:yaml.org,2002:int",
+                    "+0x1aB"},
+                  {formata_yamerl_str,formata_yamerl_node_str,"tag:yaml.org,2002:str",
                     [{line,23},{column,3}],
-                    -427},
+                    "-0x1aB"},
                   {formata_yamerl_str,formata_yamerl_node_str,"tag:yaml.org,2002:str",
                     [{line,25},{column,4}],
                     "123:1:23"},

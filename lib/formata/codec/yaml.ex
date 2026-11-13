@@ -12,7 +12,10 @@ defmodule Formata.Codec.YAML do
       boolean keys stay integers/booleans). No atoms are created from content.
     * Duplicate mapping keys are rejected with `:parse` / `:duplicate_key`,
       including the line/column reported by yamerl.
-    * Merge keys (`<<`) are rejected with `:unsupported` / `:merge_key`.
+    * Plain implicit merge keys (`<<`) are rejected with `:unsupported` /
+      `:merge_key`; quoted or explicitly string-tagged `<<` keys stay literal.
+    * Null and float scalar keys remain distinct values (including normalized
+      special floats). Sequence/mapping keys are `:unsupported_key` errors.
     * Anchors and aliases are expanded; anchors, comments, formatting and key
       order are not preserved.
     * `.inf`, `-.inf`, `.nan` become `:infinity`, `:negative_infinity`, `:nan`.
@@ -20,7 +23,18 @@ defmodule Formata.Codec.YAML do
       `2001-12-14` decodes as the string `"2001-12-14"`.
     * Syntax errors carry the line/column reported by yamerl.
 
-  Options: none.
+  Options (also enforced for encoding and its read-back check):
+
+    * `:max_depth` — non-negative maximum node depth (default `128`); root
+      depth is zero and mapping keys, values and sequence elements add one.
+    * `:max_nodes` — positive maximum expanded node count (default `100_000`),
+      including mapping keys and every occurrence of an aliased subtree.
+
+  Limits are finite and local to each call. Parsing stops before an alias
+  exceeds a limit; validation, normalization and conversion share one bounded
+  traversal. The parser also bounds pending syntax before construction. An
+  explicit `%YAML 1.1` directive selects that schema; otherwise YAML 1.2 core
+  scalar resolution applies. Timestamps remain strings in both schemas.
 
   ## Encoding
 
@@ -43,49 +57,84 @@ defmodule Formata.Codec.YAML do
   @impl true
   def format, do: :yaml
 
+  @default_limits [max_depth: 128, max_nodes: 100_000]
+
   @impl true
   def decode(input, opts \\ [])
 
   def decode(input, opts) when is_binary(input) and is_list(opts) do
-    case Formata.YamlElixir.read_all_from_string(input) do
-      {:ok, []} ->
-        {:ok, nil}
+    with {:ok, limits} <- limits(opts),
+         {:ok, documents} <- read_nodes(input, limits) do
+      case documents do
+        [] ->
+          {:ok, nil}
 
-      {:ok, [document]} ->
-        with {:ok, root} <- check_structure(input) do
-          # Formata.YamlElixir maps a null document root to %{}; keep it null.
-          if match?({:formata_yamerl_null, _, _, _}, root),
-            do: {:ok, nil},
-            else: {:ok, normalize(document)}
-        end
+        [{:formata_yamerl_doc, root}] ->
+          with {:ok, value, _remaining} <- convert_node(root, [], 0, limits.max_nodes, limits) do
+            {:ok, value}
+          end
 
-      {:ok, documents} ->
-        Error.error(
-          :parse,
-          :multiple_documents,
-          "expected a single YAML document, found #{length(documents)}",
-          backend: Formata.YamlElixir,
-          format: :yaml,
-          details: %{count: length(documents)}
-        )
+        documents ->
+          Error.error(
+            :parse,
+            :multiple_documents,
+            "expected a single YAML document, found #{length(documents)}",
+            backend: Formata.YamlElixir,
+            format: :yaml,
+            details: %{count: length(documents)}
+          )
+      end
+    end
+  end
+
+  defp limits(opts) do
+    specs = [
+      {:max_depth, &(is_integer(&1) and &1 >= 0), "a non-negative integer"},
+      {:max_nodes, &(is_integer(&1) and &1 > 0), "a positive integer"}
+    ]
+
+    with :ok <- Formata.Codec.check_options(opts, specs, backend: __MODULE__, format: :yaml) do
+      {:ok, @default_limits |> Keyword.merge(opts) |> Map.new()}
+    end
+  end
+
+  defp read_nodes(input, limits) do
+    opts = [
+      max_depth: limits.max_depth,
+      max_nodes: limits.max_nodes,
+      max_documents: 1,
+      # Protect pending implicit-key parser state before constructor callbacks.
+      max_parser_depth: limits.max_depth + 1,
+      max_parser_nodes: limits.max_nodes
+    ]
+
+    case Formata.YamlElixir.read_nodes_from_string(input, opts) do
+      {:ok, nodes} ->
+        {:ok, nodes}
 
       {:error, %Formata.YamlElixir.ParsingError{} = error} ->
-        Error.error(:parse, :syntax, error.message || "malformed YAML",
-          backend: Formata.YamlElixir,
-          format: :yaml,
-          location: location(error.line, error.column),
-          details: %{type: error.type},
-          cause: error
-        )
+        code =
+          if error.type in [:limit_exceeded, :multiple_documents], do: error.type, else: :syntax
 
-      {:error, error} ->
-        Error.error(:parse, :syntax, Exception.message(error),
+        details = public_limit_details(error.details)
+
+        Error.error(:parse, code, error.message || "malformed YAML",
           backend: Formata.YamlElixir,
           format: :yaml,
+          path: Map.get(error.details, :path, []),
+          location: location(error.line, error.column),
+          details: Map.put(details, :type, error.type),
           cause: error
         )
     end
   end
+
+  # Parser collection depth is one-based; expose the same root-zero depth
+  # contract as constructor aliases, conversion and encoder preflight.
+  defp public_limit_details(%{phase: :parser, limit: :max_depth} = details),
+    do: details |> Map.update!(:max, &(&1 - 1)) |> Map.update!(:actual, &(&1 - 1))
+
+  defp public_limit_details(details), do: details
 
   defp location(line, column) when is_integer(line) and is_integer(column),
     do: %{line: line, column: column}
@@ -93,88 +142,105 @@ defmodule Formata.Codec.YAML do
   defp location(line, _) when is_integer(line), do: %{line: line}
   defp location(_, _), do: nil
 
-  defp normalize(:"+inf"), do: :infinity
-  defp normalize(:"-inf"), do: :negative_infinity
-  defp normalize(list) when is_list(list), do: Enum.map(list, &normalize/1)
-
-  defp normalize(map) when is_map(map),
-    do: Map.new(map, fn {k, v} -> {normalize(k), normalize(v)} end)
-
-  defp normalize(value), do: value
-
-  # Formata.YamlElixir folds duplicate keys (first wins) and rewrites `<<` keys, so the
-  # detailed yamerl node tree is inspected for those before values are used.
-  defp check_structure(input) do
-    nodes =
-      :formata_yamerl_constr.string(input,
-        detailed_constr: true,
-        keep_duplicate_keys: true,
-        str_node_as_binary: true
-      )
-
-    [{:formata_yamerl_doc, root}] = nodes
-
-    with :ok <- check_node(root, []), do: {:ok, root}
+  # Validate, normalize and convert in one bounded traversal. No entry is put
+  # into an ordinary map until its key and value have been checked; duplicate
+  # identities use the normalized Elixir key, without stringifying its type.
+  defp convert_node(node, path, depth, remaining, limits) do
+    with :ok <- budget(:parse, path, depth, remaining, limits, node_loc(node)) do
+      convert_value(node, path, depth, remaining - 1, limits)
+    end
   end
 
-  defp check_node({:formata_yamerl_map, _module, _tag, _loc, pairs}, path) do
-    Enum.reduce_while(pairs, {:ok, MapSet.new()}, fn {key, value}, {:ok, seen} ->
-      key_value = node_value(key)
-      loc = node_loc(key)
-
-      cond do
-        key_value == "<<" ->
-          {:halt,
-           Error.error(:unsupported, :merge_key, "YAML merge keys (<<) are not supported",
-             backend: __MODULE__,
-             format: :yaml,
-             path: Enum.reverse(path),
-             location: loc
-           )}
-
-        MapSet.member?(seen, key_value) ->
-          {:halt,
-           Error.error(:parse, :duplicate_key, "duplicate mapping key #{inspect(key_value)}",
-             backend: Formata.YamlElixir,
-             format: :yaml,
-             path: Enum.reverse(path),
-             location: loc,
-             details: %{key: key_value}
-           )}
-
-        true ->
-          case check_node(value, [key_value | path]) do
-            :ok -> {:cont, {:ok, MapSet.put(seen, key_value)}}
-            error -> {:halt, error}
-          end
+  defp convert_value({:formata_yamerl_map, _, _, _, pairs}, path, depth, remaining, limits) do
+    Enum.reduce_while(pairs, {:ok, [], MapSet.new(), remaining}, fn {key, value},
+                                                                    {:ok, acc, seen, left} ->
+      with :ok <- supported_key(key, path),
+           {:ok, decoded_key, left} <- convert_node(key, path, depth + 1, left, limits),
+           :ok <- unique_key(decoded_key, key, seen, path),
+           {:ok, decoded_value, left} <-
+             convert_node(value, [decoded_key | path], depth + 1, left, limits) do
+        {:cont, {:ok, [{decoded_key, decoded_value} | acc], MapSet.put(seen, decoded_key), left}}
+      else
+        error -> {:halt, error}
       end
     end)
     |> case do
-      {:ok, _seen} -> :ok
+      {:ok, pairs, _seen, left} -> {:ok, Map.new(pairs), left}
       error -> error
     end
   end
 
-  defp check_node({:formata_yamerl_seq, _module, _tag, _loc, items, _count}, path) do
+  defp convert_value({:formata_yamerl_seq, _, _, _, items, _}, path, depth, remaining, limits) do
     items
     |> Enum.with_index()
-    |> Enum.reduce_while(:ok, fn {item, i}, :ok ->
-      case check_node(item, [i | path]) do
-        :ok -> {:cont, :ok}
+    |> Enum.reduce_while({:ok, [], remaining}, fn {item, index}, {:ok, acc, left} ->
+      case convert_node(item, [index | path], depth + 1, left, limits) do
+        {:ok, value, left} -> {:cont, {:ok, [value | acc], left}}
         error -> {:halt, error}
       end
     end)
+    |> case do
+      {:ok, items, left} -> {:ok, Enum.reverse(items), left}
+      error -> error
+    end
   end
 
-  defp check_node(_scalar, _path), do: :ok
+  defp convert_value({:formata_yamerl_null, _, _, _}, _, _, remaining, _),
+    do: {:ok, nil, remaining}
 
-  defp node_value({:formata_yamerl_map, _, _, _, pairs}),
-    do: Map.new(pairs, fn {k, v} -> {node_value(k), node_value(v)} end)
+  defp convert_value({_type, _module, _tag, _loc, value}, _, _, remaining, _),
+    do: {:ok, normalize_scalar(value), remaining}
 
-  defp node_value({:formata_yamerl_seq, _, _, _, items, _}), do: Enum.map(items, &node_value/1)
-  defp node_value({:formata_yamerl_null, _, _, _}), do: nil
-  defp node_value({_type, _module, _tag, _loc, value}), do: value
-  defp node_value(other), do: other
+  defp normalize_scalar(:"+inf"), do: :infinity
+  defp normalize_scalar(:"-inf"), do: :negative_infinity
+  defp normalize_scalar(value), do: value
+
+  defp supported_key({type, _, _, _, _} = key, path)
+       when type == :formata_yamerl_map do
+    unsupported_key(key, path, :mapping)
+  end
+
+  defp supported_key({:formata_yamerl_seq, _, _, _, _, _} = key, path),
+    do: unsupported_key(key, path, :sequence)
+
+  defp supported_key({:formata_yamerl_str, _, _, pres, "<<"} = key, path) do
+    if pres[:scalar_style] == :plain and pres[:source_tag] == {:non_specific, ~c"?"} do
+      Error.error(:unsupported, :merge_key, "YAML merge keys (<<) are not supported",
+        backend: __MODULE__,
+        format: :yaml,
+        path: Enum.reverse(path),
+        location: node_loc(key)
+      )
+    else
+      :ok
+    end
+  end
+
+  defp supported_key(_key, _path), do: :ok
+
+  defp unsupported_key(key, path, type) do
+    Error.error(:unsupported, :unsupported_key, "YAML #{type} keys are not supported",
+      backend: __MODULE__,
+      format: :yaml,
+      path: Enum.reverse(path),
+      location: node_loc(key),
+      details: %{type: type}
+    )
+  end
+
+  defp unique_key(key, node, seen, path) do
+    if MapSet.member?(seen, key) do
+      Error.error(:parse, :duplicate_key, "duplicate mapping key #{inspect(key)}",
+        backend: Formata.YamlElixir,
+        format: :yaml,
+        path: Enum.reverse(path),
+        location: node_loc(node),
+        details: %{key: key}
+      )
+    else
+      :ok
+    end
+  end
 
   defp node_loc(node) when is_tuple(node) and tuple_size(node) >= 4 do
     case elem(node, 3) do
@@ -183,7 +249,28 @@ defmodule Formata.Codec.YAML do
     end
   end
 
-  defp node_loc(_), do: nil
+  defp budget(kind, path, depth, remaining, limits, location \\ nil) do
+    cond do
+      depth > limits.max_depth ->
+        limit_error(kind, path, :max_depth, limits.max_depth, depth, location)
+
+      remaining <= 0 ->
+        limit_error(kind, path, :max_nodes, limits.max_nodes, limits.max_nodes + 1, location)
+
+      true ->
+        :ok
+    end
+  end
+
+  defp limit_error(kind, path, limit, max, actual, location) do
+    Error.error(kind, :limit_exceeded, "YAML #{limit} limit of #{max} exceeded",
+      backend: __MODULE__,
+      format: :yaml,
+      path: Enum.reverse(path),
+      location: location,
+      details: %{limit: limit, max: max, actual: actual}
+    )
+  end
 
   # -- Encoding -------------------------------------------------------------------
 
@@ -202,12 +289,47 @@ defmodule Formata.Codec.YAML do
 
   @impl true
   def encode(data, opts \\ []) when is_list(opts) do
-    with :ok <- Formata.Codec.check_domain(data, @profile),
+    with {:ok, limits} <- limits(opts),
+         {:ok, _remaining} <- check_input_budget(data, [], 0, limits.max_nodes, limits),
+         :ok <- Formata.Codec.check_domain(data, @profile),
          {:ok, yaml} <- emit(data),
-         :ok <- verify(yaml, data) do
+         :ok <- verify(yaml, data, limits) do
       {:ok, yaml}
     end
   end
+
+  defp check_input_budget(data, path, depth, remaining, limits) do
+    with :ok <- budget(:encode, path, depth, remaining, limits) do
+      check_input_children(data, path, depth + 1, remaining - 1, limits)
+    end
+  end
+
+  defp check_input_children(data, path, depth, remaining, limits)
+       when is_map(data) and not is_struct(data) do
+    Enum.reduce_while(data, {:ok, remaining}, fn {key, value}, {:ok, left} ->
+      with {:ok, left} <- check_input_budget(key, path, depth, left, limits),
+           {:ok, left} <- check_input_budget(value, [key | path], depth, left, limits) do
+        {:cont, {:ok, left}}
+      else
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp check_input_children(data, path, depth, remaining, limits) when is_list(data) do
+    Enum.reduce_while(data, {:ok, remaining, 0}, fn value, {:ok, left, index} ->
+      case check_input_budget(value, [index | path], depth, left, limits) do
+        {:ok, left} -> {:cont, {:ok, left, index + 1}}
+        error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, left, _index} -> {:ok, left}
+      error -> error
+    end
+  end
+
+  defp check_input_children(_data, _path, _depth, remaining, _limits), do: {:ok, remaining}
 
   defp emit(data) do
     case Formata.Ymlr.document(to_ymlr(data)) do
@@ -230,8 +352,8 @@ defmodule Formata.Codec.YAML do
   defp to_ymlr(map) when is_map(map), do: Map.new(map, fn {k, v} -> {k, to_ymlr(v)} end)
   defp to_ymlr(value), do: value
 
-  defp verify(yaml, data) do
-    case decode(yaml) do
+  defp verify(yaml, data, limits) do
+    case decode(yaml, Map.to_list(limits)) do
       {:ok, ^data} ->
         :ok
 
