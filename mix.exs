@@ -75,7 +75,7 @@ defmodule Formata.MixProject do
           Formata.Backplane.Schema.Error,
           Formata.Backplane.Schema.Walker
         ],
-        Support: [Formata.Transform, Formata.Error]
+        Support: [Formata.JSON, Formata.Transform, Formata.Error]
       ],
       filter_modules: &public_module?/2,
       skip_code_autolink_to: &internal_reference?/1

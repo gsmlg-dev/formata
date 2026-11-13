@@ -18,6 +18,7 @@ umbrella, schema AST, schema inference, or schema conversion.
 | `Formata.Schema` | `compile/3`, `check/3`, compiled-schema struct |
 | `Formata.Schema.Native` | `Formata.Backplane.Schema` adapter, pure-validation preflight, casting |
 | `Formata.Schema.JSONSchema` | `Formata.Backplane.JsonSchema` adapter |
+| `Formata.JSON` | Phoenix/Plug JSON library module (strict decode, `JSON` encode) |
 | `Formata.Transform` | Explicit data transformations |
 | `Formata.Error` | Structured errors |
 
@@ -353,6 +354,25 @@ as a replacement and rejected:
 
 It is much faster for complete input, which is what `Formata.decode/3` is
 for; a hybrid would add a second parser without serving the streaming case.
+
+### Phoenix JSON library
+
+Phoenix requires `decode!/1`, `encode!/1`, and `encode_to_iodata!/1` of its
+`:json_library` (the raising functions of Elixir's `JSON`); Plug's JSON parser
+calls `decode!/1`, or `decode!/2` through an MFA tuple. `Formata.JSON`
+implements them:
+
+* Decoding is `Formata.decode/3` with `:json`, so request bodies and socket
+  messages get the same guarantees as other Formata input: RFC 8259, string
+  keys, and duplicate keys rejected. The first `Formata.Error` is raised.
+* Encoding delegates to Elixir's `JSON` rather than Formata's strict encoder.
+  Phoenix and LiveView pass atom keys and values and application structs;
+  the strict portable domain rejects those by design. Structs use the
+  standard `JSON.Encoder` protocol, so existing `@derive JSON.Encoder`
+  declarations keep working; the internal `Formata.Jason` fork and its
+  protocol stay private.
+* Checked end to end with Phoenix 1.8.16 and Plug 1.20.3 (`Plug.Parsers`,
+  `Phoenix.Controller.json/2`, `Phoenix.Socket.V2.JSONSerializer`).
 
 ### JSON5
 

@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `Formata.JSON`, a Phoenix/Plug JSON library module
+  (`config :phoenix, :json_library, Formata.JSON`) with `decode!/1,2`,
+  `encode!/1`, and `encode_to_iodata!/1`. Decoding is Formata's strict JSON
+  decoder (duplicate keys rejected, raising `Formata.Error`); encoding
+  delegates to Elixir's `JSON` (`JSON.Encoder` for structs).
+
 ## [0.2.1] - 2026-11-13
 
 ### Changed

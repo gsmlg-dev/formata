@@ -267,6 +267,31 @@ File.stream!("events.jsonl")
 Whether blank lines are allowed and how line numbers are reported is up to
 the caller (`Stream.with_index/2`).
 
+## Phoenix and Plug
+
+`Formata.JSON` can be Phoenix's JSON library:
+
+```elixir
+# config/config.exs
+config :phoenix, :json_library, Formata.JSON
+```
+
+Decoding (request bodies through `Plug.Parsers` with
+`json_decoder: Phoenix.json_library()`, socket messages) uses Formata's
+strict decoder: string keys, and duplicate keys rejected with a
+`Formata.Error`, which `Plug.Parsers` reports as HTTP 400. Encoding delegates
+to Elixir's built-in `JSON`, so atom keys and values and structs that
+`@derive JSON.Encoder` work as in a default Phoenix application. Decode
+options go through Plug's MFA form:
+`json_decoder: {Formata.JSON, :decode!, [[comments: true]]}`.
+
+```elixir
+iex> Formata.JSON.encode!(%{status: :ok, items: [1, nil]})
+~s({"status":"ok","items":[1,null]})
+iex> Formata.JSON.decode!(~s({"items": [1, null]}))
+%{"items" => [1, nil]}
+```
+
 ## Codecs and value domains
 
 Decoded data uses ordinary Elixir terms. Document keys stay strings and
