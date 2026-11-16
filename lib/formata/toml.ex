@@ -1,4 +1,4 @@
-defmodule Formata.Toml do
+defmodule Formata.TOML do
   # Formata fork of gsmlg_toml 1.0.0 (see NOTICE.md).
   @moduledoc false
 
@@ -6,7 +6,7 @@ defmodule Formata.Toml do
   @type opt ::
           {:keys, :atoms | :atoms! | :string | (key -> term)}
           | {:filename, String.t()}
-          | {:transforms, [Formata.Toml.Transform.t()]}
+          | {:transforms, [Formata.TOML.Transform.t()]}
   @type opts :: [opt]
 
   @type reason :: {:invalid_toml, binary} | binary
@@ -26,7 +26,7 @@ defmodule Formata.Toml do
       * `:atoms!` - converts keys to atoms with `String.to_existing_atom/1`
       * `(key -> term)` - converts keys using the provided function
     * `:transforms` - a list of custom transformations to apply to decoded TOML values,
-      see `c:Formata.Toml.Transform.transform/2` for details.
+      see `c:Formata.TOML.Transform.transform/2` for details.
       
   ## Decoding keys to atoms
 
@@ -53,7 +53,7 @@ defmodule Formata.Toml do
   defdelegate decode(bin, opts \\ []), to: __MODULE__.Decoder
 
   @doc """
-  Same as `decode/1`, but returns the document directly, or raises `Formata.Toml.Error` if it fails.
+  Same as `decode/1`, but returns the document directly, or raises `Formata.TOML.Error` if it fails.
   """
   @spec decode!(binary) :: map | no_return
   @spec decode!(binary, opts) :: map | no_return
@@ -69,7 +69,7 @@ defmodule Formata.Toml do
   defdelegate decode_file(path, opts \\ []), to: __MODULE__.Decoder
 
   @doc """
-  Same as `decode_file/1`, but returns the document directly, or raises `Formata.Toml.Error` if it fails.
+  Same as `decode_file/1`, but returns the document directly, or raises `Formata.TOML.Error` if it fails.
   """
   @spec decode_file!(binary) :: map | no_return
   @spec decode_file!(binary, opts) :: map | no_return
@@ -85,7 +85,7 @@ defmodule Formata.Toml do
   defdelegate decode_stream(stream, opts \\ []), to: __MODULE__.Decoder
 
   @doc """
-  Same as `decode_stream/1`, but returns the document directly, or raises `Formata.Toml.Error` if it fails.
+  Same as `decode_stream/1`, but returns the document directly, or raises `Formata.TOML.Error` if it fails.
   """
   @spec decode_stream!(Enumerable.t()) :: map | no_return
   @spec decode_stream!(Enumerable.t(), opts) :: map | no_return

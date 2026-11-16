@@ -27,8 +27,8 @@ mix docs
 mix hex.build
 ```
 
-`mix test` includes the ported upstream suites of the forked backends
-(`test/formata/vendor/`), the TOML 1.0.0 `toml-test` suite, and the required
+`mix test` includes the ported upstream suites alongside the module tests
+under `test/formata/`, the TOML 1.0.0 `toml-test` suite, and the required
 JSON-Schema-Test-Suite cases for Draft 7 and Draft 2020-12. Run it on the
 oldest supported Elixir (1.18) as well; CI does.
 

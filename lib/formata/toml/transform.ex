@@ -1,4 +1,4 @@
-defmodule Formata.Toml.Transform do
+defmodule Formata.TOML.Transform do
   @moduledoc """
   Defines the behavior for custom transformations of decoded TOML values.
 
@@ -59,7 +59,7 @@ defmodule Formata.Toml.Transform do
   And finally, the transforer implementation:
 
       defmodule ServerTransform do
-        use Formata.Toml.Transform
+        use Formata.TOML.Transform
 
         # Transform IP strings to Erlang address tuples
         def transform(:ip, ip) when is_binary(ip) do
@@ -90,7 +90,7 @@ defmodule Formata.Toml.Transform do
       
     Assuming we decode with the following options: 
 
-        Formata.Toml.decode!(content, keys: :atoms, transforms: [ServerTransform])
+        Formata.TOML.decode!(content, keys: :atoms, transforms: [ServerTransform])
       
     The result would be:
 

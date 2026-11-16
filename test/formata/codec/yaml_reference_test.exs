@@ -88,10 +88,10 @@ defmodule Formata.Codec.YAMLReferenceTest do
       )
 
     on_exit(fn -> File.rm(path) end)
-    File.write!(path, Formata.Jason.encode!(documents))
+    File.write!(path, Formata.JSON.Backend.encode!(documents))
     {output, status} = System.cmd(@python, ["-I", @script, path], stderr_to_stdout: true)
     assert status == 0, output
-    assert Formata.Jason.decode!(output) == Enum.map(data, &typed/1)
+    assert Formata.JSON.Backend.decode!(output) == Enum.map(data, &typed/1)
   end
 
   defp typed(nil), do: ["null"]
@@ -108,7 +108,7 @@ defmodule Formata.Codec.YAMLReferenceTest do
     pairs =
       value
       |> Enum.map(fn {k, v} -> [typed(k), typed(v)] end)
-      |> Enum.sort_by(fn [k, _] -> Formata.Jason.encode!(k) end)
+      |> Enum.sort_by(fn [k, _] -> Formata.JSON.Backend.encode!(k) end)
 
     ["map", pairs]
   end

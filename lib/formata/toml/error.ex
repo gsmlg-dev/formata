@@ -1,4 +1,4 @@
-defmodule Formata.Toml.Error do
+defmodule Formata.TOML.Error do
   @moduledoc false
 
   defexception [:message, :reason]

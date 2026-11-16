@@ -1,18 +1,18 @@
-defmodule Formata.Toml.Lexer.String do
+defmodule Formata.TOML.Lexer.String do
   @moduledoc false
 
   # This module manages the complexity of lexing quoted and literal
   # strings as defined by the TOML spec.
 
-  import Formata.Toml.Lexer.Guards
+  import Formata.TOML.Lexer.Guards
 
   @type type ::
           :string
           | :multiline_string
 
-  @type skip :: Formata.Toml.Lexer.skip()
-  @type lines :: Formata.Toml.Lexer.lines()
-  @type lexer_err :: Formata.Toml.Lexer.lexer_err()
+  @type skip :: Formata.TOML.Lexer.skip()
+  @type lines :: Formata.TOML.Lexer.lines()
+  @type lexer_err :: Formata.TOML.Lexer.lexer_err()
   @type result :: {:ok, binary, {type, skip, binary, lines}} | lexer_err
 
   @spec lex(binary, skip, lines) :: result

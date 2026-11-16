@@ -1,9 +1,9 @@
 defmodule Formata.Schema.JSONSchema do
   @moduledoc """
-  JSON Schema documents compiled and validated by `Formata.Backplane.JsonSchema`.
+  JSON Schema documents compiled and validated by `Formata.JSONSchema`.
 
   Documents are JSON-compatible maps (string keys) or the boolean schemas
-  `true`/`false`. They are handed to `Formata.Backplane.JsonSchema` as they are; Formata
+  `true`/`false`. They are handed to `Formata.JSONSchema` as they are; Formata
   never converts them to native schemas.
 
   ## Dialects
@@ -27,7 +27,7 @@ defmodule Formata.Schema.JSONSchema do
 
   `format` is an annotation by default and does not reject data.
   Pass `format_assertion: true` to assert the formats implemented by
-  `Formata.Backplane.JsonSchema` (`email`, `date-time`, `date`, `time`, `uri`, `ipv4`,
+  `Formata.JSONSchema` (`email`, `date-time`, `date`, `time`, `uri`, `ipv4`,
   `ipv6`, `hostname`, `regex`, `uuid`, ...). Unknown format names are always
   accepted. In Draft 2020-12, a custom meta-schema that enables the
   format-assertion vocabulary also enables assertion; a document without
@@ -101,7 +101,7 @@ defmodule Formata.Schema.JSONSchema do
        %Schema{
          kind: :json_schema,
          dialect: dialect_atom(compiled.draft),
-         backend: Formata.Backplane.JsonSchema,
+         backend: Formata.JSONSchema,
          compiled: compiled,
          source: document,
          options: opts
@@ -167,8 +167,8 @@ defmodule Formata.Schema.JSONSchema do
 
   defp check_dialect(%{"$schema" => uri} = document, opts) when is_binary(uri) do
     known? =
-      Formata.Backplane.JsonSchema.Draft7.Dialect.builtin_schema?(document) or
-        Formata.Backplane.JsonSchema.Draft202012.Dialect.builtin_schema?(document)
+      Formata.JSONSchema.Draft7.Dialect.builtin_schema?(document) or
+        Formata.JSONSchema.Draft202012.Dialect.builtin_schema?(document)
 
     if known? or Keyword.has_key?(opts, :dialect) or is_function(opts[:loader], 1) do
       :ok
@@ -188,13 +188,13 @@ defmodule Formata.Schema.JSONSchema do
   defp check_dialect(_document, _opts), do: :ok
 
   defp backend_compile(document, backend_opts) do
-    case Formata.Backplane.JsonSchema.compile(document, backend_opts) do
+    case Formata.JSONSchema.compile(document, backend_opts) do
       {:ok, compiled} -> {:ok, compiled}
       {:error, error} -> {:error, [compile_error(error)]}
     end
   end
 
-  defp compile_error(%Formata.Backplane.JsonSchema.Types.Error{rule: rule} = error) do
+  defp compile_error(%Formata.JSONSchema.Types.Error{rule: rule} = error) do
     code =
       case rule do
         :draft_conflict -> :dialect_conflict
@@ -202,8 +202,8 @@ defmodule Formata.Schema.JSONSchema do
         rule -> rule
       end
 
-    Error.new(:schema, code, Formata.Backplane.JsonSchema.format_error(error),
-      backend: Formata.Backplane.JsonSchema,
+    Error.new(:schema, code, Formata.JSONSchema.format_error(error),
+      backend: Formata.JSONSchema,
       schema_path: Enum.reverse(error.path || []),
       details: context_details(error),
       cause: error
@@ -212,7 +212,7 @@ defmodule Formata.Schema.JSONSchema do
 
   defp compile_error(other) do
     Error.new(:schema, :invalid_schema, "JSON Schema compilation failed: #{inspect(other)}",
-      backend: Formata.Backplane.JsonSchema,
+      backend: Formata.JSONSchema,
       cause: other
     )
   end
@@ -225,7 +225,7 @@ defmodule Formata.Schema.JSONSchema do
   def validate(%Schema{kind: :json_schema, compiled: compiled}, data, opts) do
     with :ok <- reject_facade_options(opts),
          :ok <- check_data(data) do
-      case Formata.Backplane.JsonSchema.validate(compiled, data) do
+      case Formata.JSONSchema.validate(compiled, data) do
         :ok -> :ok
         {:error, errors} -> {:error, Enum.map(errors, &validation_error/1)}
       end
@@ -266,7 +266,7 @@ defmodule Formata.Schema.JSONSchema do
     end
   end
 
-  defp validation_error(%Formata.Backplane.JsonSchema.Types.Error{} = error) do
+  defp validation_error(%Formata.JSONSchema.Types.Error{} = error) do
     {kind, code} =
       case {error.rule, error.context} do
         {:ref, %{contrast: contrast}}
@@ -286,7 +286,7 @@ defmodule Formata.Schema.JSONSchema do
       end
 
     Error.new(kind, code, message(error),
-      backend: Formata.Backplane.JsonSchema,
+      backend: Formata.JSONSchema,
       path: Enum.reverse(error.path || []),
       details: context_details(error),
       cause: error
@@ -295,7 +295,7 @@ defmodule Formata.Schema.JSONSchema do
 
   # `Formata.Error` renders the data path itself (`Exception.message/1`), so the
   # backend message is formatted without its "At /...:" location prefix.
-  defp message(error), do: Formata.Backplane.JsonSchema.format_error(%{error | path: []})
+  defp message(error), do: Formata.JSONSchema.format_error(%{error | path: []})
 
   defp context_details(%{context: nil}), do: %{}
 

@@ -42,7 +42,7 @@ defmodule Formata.Codec.YAMLTest do
 
     test "malformed YAML reports the backend location" do
       assert {:error,
-              [%Error{kind: :parse, code: :syntax, backend: Formata.YamlElixir, location: loc}]} =
+              [%Error{kind: :parse, code: :syntax, backend: Formata.YAML.Reader, location: loc}]} =
                Formata.decode("a: [1, 2\n", :yaml)
 
       assert %{line: 1, column: _} = loc

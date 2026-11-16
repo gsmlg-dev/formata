@@ -127,7 +127,10 @@ defmodule Formata.Codec.JSON5 do
   defp value(:negative_infinity, _indent), do: "-Infinity"
   defp value(:nan, _indent), do: "NaN"
   defp value(v, _indent) when is_integer(v), do: Integer.to_string(v)
-  defp value(v, _indent) when is_float(v) or is_binary(v), do: Formata.Jason.encode_to_iodata!(v)
+
+  defp value(v, _indent) when is_float(v) or is_binary(v),
+    do: Formata.JSON.Backend.encode_to_iodata!(v)
+
   defp value([], _indent), do: "[]"
   defp value(map, _indent) when map_size(map) == 0, do: "{}"
 
@@ -141,7 +144,7 @@ defmodule Formata.Codec.JSON5 do
       map
       |> Enum.sort_by(&elem(&1, 0))
       |> Enum.map(fn {k, v} ->
-        [Formata.Jason.encode_to_iodata!(k), sep, value(v, deeper(indent))]
+        [Formata.JSON.Backend.encode_to_iodata!(k), sep, value(v, deeper(indent))]
       end)
 
     container("{", "}", members, indent)

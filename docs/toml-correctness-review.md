@@ -89,7 +89,7 @@ Executed commands and results:
 | --- | --- |
 | `mix test test/formata/codec/toml_test.exs test/formata/codec/toml_conformance_test.exs` (before edits) | 1151 passed; no skips |
 | `mix test test/formata/codec/encoding_keys_test.exs test/formata/codec/json_test.exs test/formata/codec/json5_test.exs test/formata/codec/yaml_test.exs test/formata/codec/toml_test.exs` | 71 passed |
-| `mix test test/formata/codec/toml_boundary_test.exs test/formata/codec/toml_test.exs test/formata/codec/toml_conformance_test.exs test/formata/vendor/toml` | 1470 passed; no skips; 173 valid and 293 invalid boundary documents |
+| `mix test test/formata/codec/toml_boundary_test.exs test/formata/codec/toml_test.exs test/formata/codec/toml_conformance_test.exs test/formata/toml_test.exs test/formata/toml` | 1470 passed; no skips; 173 valid and 293 invalid boundary documents |
 | `mix deps.get` | Passed; lockfile unchanged |
 | `mix format --check-formatted` | Passed |
 | `MIX_ENV=test mix compile --warnings-as-errors --force` | Passed on Elixir 1.20.4 and 1.18.4 |

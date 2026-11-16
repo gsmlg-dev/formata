@@ -1,0 +1,63 @@
+-module('formata_yaml_SUITE_parsing_ex_6.18_primary_tag_handle').
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(FILENAME, "test/fixtures/yaml/parser/parsing/ex_6.18_primary_tag_handle.yaml").
+
+single_test_() ->
+    ?_assertMatch(
+      {formata_yaml_parser,
+        {file,?FILENAME},
+        [],
+        <<>>,
+        82,
+        true,
+        [],
+        0,
+        83,
+        8,
+        1,
+        false,
+        7,
+        11,
+        utf8,
+        false,
+        undefined,
+        _,
+        _,
+        [],
+        {bcoll,root,0,-1,1,1,-1,1,1},
+        false,
+        false,
+        false,
+        [{impl_key,false,false,undefined,undefined,1,1}],
+        false,
+        false,
+        _,
+        [],
+        0,
+        12,
+        9,
+        undefined,
+        undefined,
+        _,
+        false,
+        [],
+        [
+          {formata_yaml_stream_end,7,11},
+          {formata_yaml_doc_end,7,11},
+          {formata_yaml_scalar,7,6,
+            {formata_yaml_tag,7,1,"tag:example.com,2000:app/foo"},
+            flow,double_quoted,"bar"},
+          {formata_yaml_doc_start,6,1,{1,2},_},
+          {formata_yaml_tag_directive,5,1,"!","tag:example.com,2000:app/"},
+          {formata_yaml_doc_end,3,1},
+          {formata_yaml_scalar,2,6,
+            {formata_yaml_tag,2,1,"!foo"},
+            flow,double_quoted,"bar"},
+          {formata_yaml_doc_start,2,1,{1,2},_},
+          {formata_yaml_stream_start,1,1,utf8}
+        ]
+      },
+      formata_yaml_parser:file(?FILENAME)
+    ).

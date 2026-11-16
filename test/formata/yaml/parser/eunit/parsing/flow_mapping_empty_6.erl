@@ -1,0 +1,66 @@
+-module(formata_yaml_SUITE_parsing_flow_mapping_empty_6).
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(FILENAME, "test/fixtures/yaml/parser/parsing/flow_mapping_empty_6.yaml").
+
+single_test_() ->
+    ?_assertMatch(
+      {formata_yaml_parser,
+        {file,?FILENAME},
+        [],
+        <<>>,
+        10,
+        true,
+        [],
+        0,
+        11,
+        4,
+        1,
+        false,
+        3,
+        2,
+        utf8,
+        false,
+        undefined,
+        _,
+        _,
+        [],
+        {bcoll,root,0,-1,1,1,-1,1,1},
+        false,
+        false,
+        false,
+        [{impl_key,false,false,undefined,undefined,1,1}],
+        false,
+        false,
+        _,
+        [],
+        0,
+        11,
+        10,
+        undefined,
+        undefined,
+        _,
+        false,
+        [],
+        [
+          {formata_yaml_stream_end,3,2},
+          {formata_yaml_doc_end,3,2},
+          {formata_yaml_collection_end,3,1,flow,mapping},
+          {formata_yaml_scalar,2,4,
+            {formata_yaml_tag,2,4,{non_specific,"?"}},
+            flow,plain,[]},
+          {formata_yaml_mapping_value,2,4},
+          {formata_yaml_scalar,2,1,
+            {formata_yaml_tag,2,1,{non_specific,"?"}},
+            flow,plain,"key"},
+          {formata_yaml_mapping_key,2,1},
+          {formata_yaml_collection_start,1,1,
+            {formata_yaml_tag,1,1,{non_specific,"?"}},
+            flow,mapping},
+          {formata_yaml_doc_start,1,1,{1,2},_},
+          {formata_yaml_stream_start,1,1,utf8}
+        ]
+      },
+      formata_yaml_parser:file(?FILENAME)
+    ).

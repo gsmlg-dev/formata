@@ -18,8 +18,8 @@
 
 ## 1. 已确认的代码现状与设计约束
 
-- `lib/formata/codec/json.ex` 通过 `Formata.Jason.decode(input, objects: :ordered_objects)` 解码，再经 `unorder/2` 拒绝重复键；`decode/2` 当前未将 opts 传递给实际解析过程。
-- `Formata.Jason.Decoder.parse/2` 是一次性递归解析，不暴露跨 Chunk 续接状态。
+- `lib/formata/codec/json.ex` 通过 `Formata.JSON.Backend.decode(input, objects: :ordered_objects)` 解码，再经 `unorder/2` 拒绝重复键；`decode/2` 当前未将 opts 传递给实际解析过程。
+- `Formata.JSON.Backend.Decoder.parse/2` 是一次性递归解析，不暴露跨 Chunk 续接状态。
 - `Formata.Codec` 只有 `format/0`、`decode/2`、`encode/2`，不要强制给所有 Codec 增加流式回调。
 - 所有预期失败使用 `{:error, [%Formata.Error{}, ...]}`；不创建动态 atom。
 - 现有 JSON 域不接受非有限浮点；`Formata.Transform` 负责显式有损转换。
@@ -72,7 +72,7 @@
 
 ## 执行摘要
 
-基线核对：`main` HEAD 为 `e7f8665`，与计划基线一致；`Formata.Jason`、`Formata.Codec.JSON` 与 `Formata.Codec` 的现状与第 1 节描述一致。CI 中 `ci.yml` 只做格式检查与编译，测试在 `test.yml`（`mix test`）中运行。
+基线核对：`main` HEAD 为 `e7f8665`，与计划基线一致；`Formata.JSON.Backend`、`Formata.Codec.JSON` 与 `Formata.Codec` 的现状与第 1 节描述一致。CI 中 `ci.yml` 只做格式检查与编译，测试在 `test.yml`（`mix test`）中运行。
 
 | 阶段 | 提交 | 内容 |
 | --- | --- | --- |

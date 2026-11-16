@@ -1,13 +1,13 @@
 defmodule Formata.Codec.TOMLConformanceTest do
   @moduledoc """
-  Conformance of `Formata.Codec.TOML.Encoder` and the `Formata.Toml` decoder
+  Conformance of `Formata.Codec.TOML.Encoder` and the `Formata.TOML` decoder
   against the TOML 1.0.0 cases of the official toml-test suite (see
   `test/fixtures/toml-test/PROVENANCE.md`).
 
   Encoder: each `valid` fixture's tagged JSON is converted into the encoder's
   value domain, encoded, and then decoded again by:
 
-    * `Formata.Toml.decode/1`, and
+    * `Formata.TOML.decode/1`, and
     * Python's `tomllib` (an independent parser), when available.
 
   Both decodings must be semantically equal to the fixture.
@@ -110,14 +110,14 @@ defmodule Formata.Codec.TOMLConformanceTest do
     if excluded, do: @tag(skip: "excluded: #{excluded}")
     if known_failure, do: @tag(:known_failure)
 
-    test "Formata.Toml.decode round-trip: #{name}" do
+    test "Formata.TOML.decode round-trip: #{name}" do
       expected = load_fixture(unquote(path))
 
       assert {:ok, toml} = Encoder.encode(expected)
-      assert {:ok, decoded} = Formata.Toml.decode(toml)
+      assert {:ok, decoded} = Formata.TOML.decode(toml)
 
       assert same?(expected, decoded), """
-      Formata.Toml.decode/1 result differs from the fixture.
+      Formata.TOML.decode/1 result differs from the fixture.
       encoded TOML:
       #{toml}
       expected: #{inspect(expected, limit: :infinity)}
@@ -160,7 +160,7 @@ defmodule Formata.Codec.TOMLConformanceTest do
                   |> Path.wildcard()
                   |> Enum.sort()
 
-  # Invalid documents that `Formata.Toml` currently accepts, mapped to the
+  # Invalid documents that `Formata.TOML` currently accepts, mapped to the
   # reason. These tests assert the document is still accepted, so fixing the
   # decoder makes them fail until the entry is removed from this list.
   @invalid_known_failures %{}
@@ -170,13 +170,13 @@ defmodule Formata.Codec.TOMLConformanceTest do
     name = path |> Path.relative_to(@fixture_root) |> Path.rootname()
     json = Path.rootname(path) <> ".json"
 
-    test "Formata.Toml.decode valid: #{name}" do
+    test "Formata.TOML.decode valid: #{name}" do
       expected = load_fixture(unquote(json))
 
-      assert {:ok, decoded} = Formata.Toml.decode(File.read!(unquote(path)))
+      assert {:ok, decoded} = Formata.TOML.decode(File.read!(unquote(path)))
 
       assert same?(expected, decoded), """
-      Formata.Toml.decode/1 result differs from the fixture.
+      Formata.TOML.decode/1 result differs from the fixture.
       expected: #{inspect(expected, limit: :infinity)}
       actual:   #{inspect(decoded, limit: :infinity)}
       """
@@ -189,14 +189,14 @@ defmodule Formata.Codec.TOMLConformanceTest do
 
     case Map.fetch(@invalid_known_failures, name) do
       {:ok, reason} ->
-        test "Formata.Toml.decode invalid (known failure: #{reason}): #{name}" do
-          assert {:ok, _} = Formata.Toml.decode(File.read!(unquote(path))),
+        test "Formata.TOML.decode invalid (known failure: #{reason}): #{name}" do
+          assert {:ok, _} = Formata.TOML.decode(File.read!(unquote(path))),
                  "now rejected; remove #{unquote(name)} from @invalid_known_failures"
         end
 
       :error ->
-        test "Formata.Toml.decode invalid: #{name}" do
-          assert {:error, _} = Formata.Toml.decode(File.read!(unquote(path)))
+        test "Formata.TOML.decode invalid: #{name}" do
+          assert {:error, _} = Formata.TOML.decode(File.read!(unquote(path)))
         end
     end
   end
@@ -217,12 +217,13 @@ defmodule Formata.Codec.TOMLConformanceTest do
     end
 
     {out, 0} = System.cmd("python3", ["-I", "-c", @python_script, @tmp_dir])
-    Formata.Jason.decode!(out)
+    Formata.JSON.Backend.decode!(out)
   end
 
   # -- Tagged JSON -> Elixir value domain -----------------------------------------
 
-  defp load_fixture(path), do: path |> File.read!() |> Formata.Jason.decode!() |> from_tagged()
+  defp load_fixture(path),
+    do: path |> File.read!() |> Formata.JSON.Backend.decode!() |> from_tagged()
 
   defp from_tagged(%{"type" => type, "value" => value} = map)
        when map_size(map) == 2 and is_binary(type) and is_binary(value),

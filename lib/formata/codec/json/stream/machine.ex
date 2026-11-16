@@ -597,7 +597,7 @@ defmodule Formata.Codec.JSON.Stream.Machine do
   defp number_step(:exp_digits, b) when b in ?0..?9, do: :exp_digits
   defp number_step(:exp_digits, _), do: :end
 
-  # Same conversions and limits as the Formata.Jason decoder.
+  # Same conversions and limits as the Formata.JSON.Backend decoder.
   defp number_value(text, i, st) do
     case :binary.split(text, ["e", "E"]) do
       [mantissa] ->

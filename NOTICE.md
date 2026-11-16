@@ -8,20 +8,22 @@ the Hex package.
 
 | Upstream package | Version | Source | License | Formata location |
 | --- | --- | --- | --- | --- |
-| `jason` | 1.4.5 | https://github.com/michalmuskala/jason (tag `v1.4.5`, `4ede428`) | Apache-2.0 ([`LICENSES/jason.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/jason.txt), [`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.Jason*` — `lib/formata/jason*` |
-| `gsmlg_toml` | 1.0.0 | https://github.com/gsmlg-dev/gsmlg_umbrella (`apps/gsmlg_toml`; no release tag — `lib/` identical to the Hex release at `ce41864` except the unforked `provider.ex`) | Apache-2.0 (package metadata; the repository `LICENSE` at `ce41864` is Apache-2.0 followed by a retained MIT notice) — the Hex 1.0.0 release shipped only the MIT notice ([`LICENSES/gsmlg_toml.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/gsmlg_toml.txt)); both texts are included ([`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.Toml*` — `lib/formata/toml*` |
-| `yaml_elixir` | 2.12.2 | https://github.com/KamilLelonek/yaml-elixir (tag `v2.12.2`, `4c5ee04`) | MIT ([`LICENSES/yaml_elixir.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/yaml_elixir.txt)) | `Formata.YamlElixir*` — `lib/formata/yaml_elixir*` |
-| `yamerl` | 0.10.0 | https://github.com/yakaz/yamerl (tag `v0.10.0`, `39981b9`) | BSD-2-Clause ([`LICENSES/yamerl.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/yamerl.txt)) | `formata_yamerl*` — `src/`, `include/` |
-| `ymlr` | 5.1.6 | https://github.com/ufirstgroup/ymlr (tag `v5.1.6`, `85bdb49`) | MIT ([`LICENSES/ymlr.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/ymlr.txt)) | `Formata.Ymlr*` — `lib/formata/ymlr*` |
-| `backplane_schema` | 1.10.76 | https://github.com/gsmlg-opt/backplane (tag `v1.10.76`, `8330b68`, `apps/backplane_schema`) | MIT ([`LICENSES/backplane_schema.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/backplane_schema.txt)) | `Formata.Backplane.Schema*` — `lib/formata/backplane/schema*` |
-| `backplane_json_schema` | 1.10.76 | https://github.com/gsmlg-opt/backplane (tag `v1.10.76`, `8330b68`, `apps/backplane_json_schema`) | Apache-2.0, declared in package metadata; no license file or copyright notice is shipped upstream ([`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.Backplane.JsonSchema*` — `lib/formata/backplane/json_schema*` |
-| `ex_json_pointer` | 0.9.0 | https://github.com/xinz/ex_json_pointer | MIT ([`LICENSES/ex_json_pointer.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/ex_json_pointer.txt)) | `Formata.ExJSONPointer*` — `lib/formata/ex_json_pointer*` |
+| `jason` | 1.4.5 | https://github.com/michalmuskala/jason (tag `v1.4.5`, `4ede428`) | Apache-2.0 ([`LICENSES/jason.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/jason.txt), [`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.JSON.Backend*` — `lib/formata/json/backend*` |
+| `gsmlg_toml` | 1.0.0 | https://github.com/gsmlg-dev/gsmlg_umbrella (`apps/gsmlg_toml`; no release tag — `lib/` identical to the Hex release at `ce41864` except the unforked `provider.ex`) | Apache-2.0 (package metadata; the repository `LICENSE` at `ce41864` is Apache-2.0 followed by a retained MIT notice) — the Hex 1.0.0 release shipped only the MIT notice ([`LICENSES/gsmlg_toml.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/gsmlg_toml.txt)); both texts are included ([`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.TOML*` — `lib/formata/toml*` |
+| `yaml_elixir` | 2.12.2 | https://github.com/KamilLelonek/yaml-elixir (tag `v2.12.2`, `4c5ee04`) | MIT ([`LICENSES/yaml_elixir.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/yaml_elixir.txt)) | `Formata.YAML.Reader*` — `lib/formata/yaml/reader*` |
+| `yamerl` | 0.10.0 | https://github.com/yakaz/yamerl (tag `v0.10.0`, `39981b9`) | BSD-2-Clause ([`LICENSES/yamerl.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/yamerl.txt)) | `formata_yaml*` — `src/`, `include/` |
+| `ymlr` | 5.1.6 | https://github.com/ufirstgroup/ymlr (tag `v5.1.6`, `85bdb49`) | MIT ([`LICENSES/ymlr.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/ymlr.txt)) | `Formata.YAML.Writer*` — `lib/formata/yaml/writer*` |
+| `backplane_schema` | 1.10.76 | https://github.com/gsmlg-opt/backplane (tag `v1.10.76`, `8330b68`, `apps/backplane_schema`) | MIT ([`LICENSES/backplane_schema.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/backplane_schema.txt)) | `Formata.NativeSchema*` — `lib/formata/native_schema*` |
+| `backplane_json_schema` | 1.10.76 | https://github.com/gsmlg-opt/backplane (tag `v1.10.76`, `8330b68`, `apps/backplane_json_schema`) | Apache-2.0, declared in package metadata; no license file or copyright notice is shipped upstream ([`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.JSONSchema*` — `lib/formata/json_schema*` |
+| `ex_json_pointer` | 0.9.0 | https://github.com/xinz/ex_json_pointer | MIT ([`LICENSES/ex_json_pointer.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/ex_json_pointer.txt)) | `Formata.JSONPointer*` — `lib/formata/json_pointer*` |
 
 ## Modifications common to all forks
 
-- Modules renamed into the `Formata` namespace (`Jason` → `Formata.Jason`,
-  `Backplane.Schema` → `Formata.Backplane.Schema`, …); yamerl's Erlang modules,
-  header files and record names are prefixed `formata_`.
+- Modules use Formata's own names (`Jason` → `Formata.JSON.Backend`,
+  `Backplane.Schema` → `Formata.NativeSchema`, …); yamerl's Erlang modules,
+  header files and record names use `formata_yaml` names. Original package
+  namespaces have no compatibility aliases. YAML tag URIs remain unchanged
+  because they identify serialized data formats.
 - Reformatted with `mix format`.
 - Compile-time optional integrations removed, because their presence would
   depend on the consumer's dependency tree: `Decimal` (Jason, Ymlr, JSON Schema
@@ -39,7 +41,7 @@ Bug fixes made in Formata after forking are listed in `CHANGELOG.md`.
 
 ## Formata additions to forked code
 
-- `Formata.Jason` decoder: opt-in `comments` and `trailing_commas` decode
+- `Formata.JSON.Backend` decoder: opt-in `comments` and `trailing_commas` decode
   options (default `false`), used by `Formata.Codec.JSON`.
 
 ## Original implementation
@@ -61,7 +63,7 @@ specifications.
 `96fd088448ec0f4d9f061c730ed7854399c46faf`, MIT licensed (Copyright (c) 2018
 TOML authors). See `test/fixtures/toml-test/PROVENANCE.md` for the file list
 and license text. Fixtures for the forked packages' own test suites are
-described by the `PROVENANCE.md` file in each `test/fixtures/<package>/`
+described by the `PROVENANCE.md` file in each backend's `test/fixtures/`
 directory. Test fixtures are not included in the Hex package.
 
 `test/fixtures/yaml-test-suite/` contains 21 scoped leaf cases from the

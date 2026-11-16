@@ -24,7 +24,7 @@ defmodule Formata.Codec.TOMLTest do
 
   defp roundtrip(data) do
     assert {:ok, toml} = Formata.encode(data, :toml)
-    assert {:ok, decoded} = Formata.Toml.decode(toml)
+    assert {:ok, decoded} = Formata.TOML.decode(toml)
     {toml, decoded}
   end
 
@@ -76,52 +76,52 @@ defmodule Formata.Codec.TOMLTest do
       assert DateTime.compare(odt, ~U[2024-02-29 12:00:00Z]) == :eq
 
       assert {:ok, %{"a" => ~U[1979-05-27 14:32:00Z]}} =
-               Formata.Toml.decode("a = 1979-05-27T07:32:00-07:00")
+               Formata.TOML.decode("a = 1979-05-27T07:32:00-07:00")
 
-      assert {:error, _} = Formata.Toml.decode("a = 1979-05-27T07:32:00+24:00")
-      assert {:error, _} = Formata.Toml.decode("a = 1979-05-27T07:32:00+00:60")
+      assert {:error, _} = Formata.TOML.decode("a = 1979-05-27T07:32:00+24:00")
+      assert {:error, _} = Formata.TOML.decode("a = 1979-05-27T07:32:00+00:60")
     end
 
     # Regression: gsmlg-dev/gsmlg_umbrella#14 (empty elements were dropped).
     test "empty array-of-tables elements and their subtables are kept" do
-      assert {:ok, %{"a" => [%{}, %{"x" => 1}]}} = Formata.Toml.decode("[[a]]\n[[a]]\nx = 1")
-      assert {:ok, %{"a" => [%{}]}} = Formata.Toml.decode("[[a]]")
-      assert {:ok, %{"a" => [%{}, %{}, %{}]}} = Formata.Toml.decode("[[a]]\n[[a]]\n[[a]]\n")
+      assert {:ok, %{"a" => [%{}, %{"x" => 1}]}} = Formata.TOML.decode("[[a]]\n[[a]]\nx = 1")
+      assert {:ok, %{"a" => [%{}]}} = Formata.TOML.decode("[[a]]")
+      assert {:ok, %{"a" => [%{}, %{}, %{}]}} = Formata.TOML.decode("[[a]]\n[[a]]\n[[a]]\n")
 
       assert {:ok, %{"a" => [%{"b" => %{"c" => 1}}, %{}]}} =
-               Formata.Toml.decode("[[a]]\n[a.b]\nc = 1\n[[a]]\n")
+               Formata.TOML.decode("[[a]]\n[a.b]\nc = 1\n[[a]]\n")
 
       assert {:ok, %{"a" => [%{"b" => [%{}]}, %{"b" => [%{}, %{"y" => 2}]}]}} =
-               Formata.Toml.decode("[[a]]\n[[a.b]]\n[[a]]\n[[a.b]]\n[[a.b]]\ny = 2\n")
+               Formata.TOML.decode("[[a]]\n[[a.b]]\n[[a]]\n[[a.b]]\n[[a.b]]\ny = 2\n")
     end
 
     # Regression: gsmlg-dev/gsmlg_umbrella#15 (bare keys `true`/`false` were rejected).
     test "true and false are valid bare keys" do
-      assert {:ok, %{"true" => 1, "false" => 2}} = Formata.Toml.decode("true = 1\nfalse = 2")
-      assert {:ok, %{"false" => false}} = Formata.Toml.decode("false = false")
-      assert {:ok, %{"true" => %{"false" => true}}} = Formata.Toml.decode("[true]\nfalse = true")
-      assert {:ok, %{"a" => %{"true" => %{"x" => 1}}}} = Formata.Toml.decode("a.true.x = 1")
-      assert {:ok, %{"t" => %{"true" => 1}}} = Formata.Toml.decode("t = { true = 1 }")
-      assert {:ok, %{"true-ish" => 1}} = Formata.Toml.decode("true-ish = 1")
-      assert {:error, _} = Formata.Toml.decode("a = truex")
+      assert {:ok, %{"true" => 1, "false" => 2}} = Formata.TOML.decode("true = 1\nfalse = 2")
+      assert {:ok, %{"false" => false}} = Formata.TOML.decode("false = false")
+      assert {:ok, %{"true" => %{"false" => true}}} = Formata.TOML.decode("[true]\nfalse = true")
+      assert {:ok, %{"a" => %{"true" => %{"x" => 1}}}} = Formata.TOML.decode("a.true.x = 1")
+      assert {:ok, %{"t" => %{"true" => 1}}} = Formata.TOML.decode("t = { true = 1 }")
+      assert {:ok, %{"true-ish" => 1}} = Formata.TOML.decode("true-ish = 1")
+      assert {:error, _} = Formata.TOML.decode("a = truex")
     end
 
     # Regression: gsmlg-dev/gsmlg_umbrella#16 (local date-time before `,` crashed).
     test "local date-times are delimited by array and inline-table punctuation" do
       assert {:ok, %{"a" => [~N[1979-05-27 07:32:00], 1]}} =
-               Formata.Toml.decode("a = [1979-05-27T07:32:00, 1]")
+               Formata.TOML.decode("a = [1979-05-27T07:32:00, 1]")
 
       assert {:ok, %{"a" => [~N[1979-05-27 07:32:00], ~D[2006-06-01]]}} =
-               Formata.Toml.decode("a = [1979-05-27T07:32:00,2006-06-01]")
+               Formata.TOML.decode("a = [1979-05-27T07:32:00,2006-06-01]")
 
       assert {:ok, %{"a" => [~N[1979-05-27 07:32:00]]}} =
-               Formata.Toml.decode("a = [1979-05-27T07:32:00]")
+               Formata.TOML.decode("a = [1979-05-27T07:32:00]")
 
       assert {:ok, %{"t" => %{"d" => ~N[1979-05-27 07:32:00], "x" => 1}}} =
-               Formata.Toml.decode("t = { d = 1979-05-27T07:32:00, x = 1 }")
+               Formata.TOML.decode("t = { d = 1979-05-27T07:32:00, x = 1 }")
 
       assert {:ok, %{"t" => %{"d" => ~N[1979-05-27 07:32:00]}}} =
-               Formata.Toml.decode("t = {d = 1979-05-27T07:32:00}")
+               Formata.TOML.decode("t = {d = 1979-05-27T07:32:00}")
     end
 
     test "decoder errors are returned, not raised, for invalid UTF-8 and escapes" do
@@ -132,7 +132,7 @@ defmodule Formata.Codec.TOMLTest do
     end
 
     test "duplicate keys and malformed input are parse errors" do
-      assert {:error, [%Error{kind: :parse, code: :syntax, backend: Formata.Toml}]} =
+      assert {:error, [%Error{kind: :parse, code: :syntax, backend: Formata.TOML}]} =
                Formata.decode("a = 1\na = 2\n", :toml)
 
       # Line/column come from the decoder's own report.

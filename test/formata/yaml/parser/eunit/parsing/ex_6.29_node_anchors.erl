@@ -1,0 +1,73 @@
+-module('formata_yaml_SUITE_parsing_ex_6.29_node_anchors').
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(FILENAME, "test/fixtures/yaml/parser/parsing/ex_6.29_node_anchors.yaml").
+
+single_test_() ->
+    ?_assertMatch(
+      {formata_yaml_parser,
+        {file,?FILENAME},
+        [],
+        <<>>,
+        59,
+        true,
+        [],
+        0,
+        60,
+        3,
+        1,
+        false,
+        2,
+        27,
+        utf8,
+        false,
+        undefined,
+        _,
+        _,
+        [],
+        {bcoll,root,0,-1,1,1,-1,1,1},
+        false,
+        false,
+        false,
+        [{impl_key,false,false,undefined,undefined,1,1}],
+        false,
+        false,
+        _,
+        [],
+        0,
+        16,
+        15,
+        undefined,
+        undefined,
+        _,
+        false,
+        [],
+        [
+          {formata_yaml_stream_end,2,27},
+          {formata_yaml_doc_end,2,27},
+          {formata_yaml_collection_end,2,27,block,mapping},
+          {formata_yaml_alias,2,20,"anchor"},
+          {formata_yaml_mapping_value,2,18},
+          {formata_yaml_scalar,2,1,
+            {formata_yaml_tag,2,1,{non_specific,"?"}},
+            flow,plain,"Second occurrence"},
+          {formata_yaml_mapping_key,2,1},
+          {formata_yaml_scalar,1,27,
+            {formata_yaml_tag,1,27,{non_specific,"?"}},
+            flow,plain,"Value"},
+          {formata_yaml_anchor,1,19,"anchor"},
+          {formata_yaml_mapping_value,1,17},
+          {formata_yaml_scalar,1,1,
+            {formata_yaml_tag,1,1,{non_specific,"?"}},
+            flow,plain,"First occurrence"},
+          {formata_yaml_mapping_key,1,1},
+          {formata_yaml_collection_start,1,1,
+            {formata_yaml_tag,1,1,{non_specific,"?"}},
+            block,mapping},
+          {formata_yaml_doc_start,1,1,{1,2},_},
+          {formata_yaml_stream_start,1,1,utf8}
+        ]
+      },
+      formata_yaml_parser:file(?FILENAME)
+    ).

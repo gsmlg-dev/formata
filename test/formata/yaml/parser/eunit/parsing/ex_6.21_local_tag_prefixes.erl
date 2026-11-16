@@ -1,0 +1,64 @@
+-module('formata_yaml_SUITE_parsing_ex_6.21_local_tag_prefixes').
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(FILENAME, "test/fixtures/yaml/parser/parsing/ex_6.21_local_tag_prefixes.yaml").
+
+single_test_() ->
+    ?_assertMatch(
+      {formata_yaml_parser,
+        {file,?FILENAME},
+        [],
+        <<>>,
+        101,
+        true,
+        [],
+        0,
+        102,
+        8,
+        1,
+        false,
+        7,
+        15,
+        utf8,
+        false,
+        undefined,
+        _,
+        _,
+        [],
+        {bcoll,root,0,-1,1,1,-1,1,1},
+        false,
+        false,
+        false,
+        [{impl_key,false,false,undefined,undefined,1,1}],
+        false,
+        false,
+        _,
+        [],
+        0,
+        13,
+        10,
+        undefined,
+        undefined,
+        _,
+        false,
+        [],
+        [
+          {formata_yaml_stream_end,7,15},
+          {formata_yaml_doc_end,7,15},
+          {formata_yaml_scalar,7,10,
+            {formata_yaml_tag,7,1,"!my-light"},
+            flow,plain,"green"},
+          {formata_yaml_doc_start,6,1,{1,2},_},
+          {formata_yaml_tag_directive,5,1,"!m!","!my-"},
+          {formata_yaml_doc_end,4,1},
+          {formata_yaml_scalar,3,10,
+            {formata_yaml_tag,3,1,"!my-light"},
+            flow,plain,"fluorescent"},
+          {formata_yaml_doc_start,2,1,{1,2},_},
+          {formata_yaml_tag_directive,1,1,"!m!","!my-"},
+          {formata_yaml_stream_start,1,1,utf8}
+        ]
+      },
+      formata_yaml_parser:file(?FILENAME)
+    ).

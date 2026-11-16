@@ -16,8 +16,8 @@ umbrella, schema AST, schema inference, or schema conversion.
 | `Formata.Codec.JSON5` parser (internal `JSON5.Parser`) | JSON5 1.0.0 parser |
 | `Formata.Codec.TOML.Encoder` | Focused TOML 1.0.0 encoder |
 | `Formata.Schema` | `compile/3`, `check/3`, compiled-schema struct |
-| `Formata.Schema.Native` | `Formata.Backplane.Schema` adapter, pure-validation preflight, casting |
-| `Formata.Schema.JSONSchema` | `Formata.Backplane.JsonSchema` adapter |
+| `Formata.Schema.Native` | `Formata.NativeSchema` adapter, pure-validation preflight, casting |
+| `Formata.Schema.JSONSchema` | `Formata.JSONSchema` adapter |
 | `Formata.JSON` | Phoenix/Plug JSON library module (strict decode, `JSON` encode) |
 | `Formata.Transform` | Explicit data transformations |
 | `Formata.Error` | Structured errors |
@@ -34,7 +34,7 @@ umbrella, schema AST, schema inference, or schema conversion.
   Error kinds: `:parse`, `:encode`, `:schema`, `:validation`, `:transform`,
   `:unsupported`. Programming errors (wrong argument types, unknown compile
   options) raise.
-* `location` is set only from backend data (`Formata.Jason` byte offsets, `Formata.Toml`
+* `location` is set only from backend data (`Formata.JSON.Backend` byte offsets, `Formata.TOML`
   line/column in messages, yamerl line/column).
 * `validate/3` requires a compiled schema; compiling is never repeated per call.
 
@@ -43,19 +43,21 @@ umbrella, schema AST, schema inference, or schema conversion.
 The backends were published packages; they are now forked into this
 repository, renamed into the `Formata` namespace (so a consumer can still use
 the originals side by side), and maintained here. Upstream test suites are
-ported under `test/formata/vendor/`. Provenance, licenses, and the common
-fork-time modifications are in `NOTICE.md`.
+ported alongside the corresponding module tests under `test/formata/`, with
+helpers under `test/support/formata/`. Fixtures are grouped by backend under
+`test/fixtures/`. Provenance, licenses, and the common fork-time modifications
+are in `NOTICE.md`.
 
 | Upstream | Version | Fork | Use |
 | --- | --- | --- | --- |
-| `jason` | 1.4.5 | `Formata.Jason` | JSON decode (`objects: :ordered_objects` for duplicate detection) and encode |
-| `gsmlg_toml` | 1.0.0 | `Formata.Toml` | TOML decode |
-| `yaml_elixir` | 2.12.2 | `Formata.YamlElixir` | YAML decode (`read_all_from_string/2`) |
-| `yamerl` | 0.10.0 | `formata_yamerl*` (Erlang) | Detailed node tree for duplicate keys, merge keys, null roots |
-| `ymlr` | 5.1.6 | `Formata.Ymlr` | YAML encode |
-| `backplane_schema` | 1.10.76 | `Formata.Backplane.Schema` | Native schemas (public vocabulary) |
-| `backplane_json_schema` | 1.10.76 | `Formata.Backplane.JsonSchema` | JSON Schema compile/validate |
-| `ex_json_pointer` | 0.9.0 | `Formata.ExJSONPointer` | JSON Pointer for the JSON Schema backend |
+| `jason` | 1.4.5 | `Formata.JSON.Backend` | JSON decode (`objects: :ordered_objects` for duplicate detection) and encode |
+| `gsmlg_toml` | 1.0.0 | `Formata.TOML` | TOML decode |
+| `yaml_elixir` | 2.12.2 | `Formata.YAML.Reader` | YAML decode (`read_all_from_string/2`) |
+| `yamerl` | 0.10.0 | `formata_yaml*` (Erlang) | Detailed node tree for duplicate keys, merge keys, null roots |
+| `ymlr` | 5.1.6 | `Formata.YAML.Writer` | YAML encode |
+| `backplane_schema` | 1.10.76 | `Formata.NativeSchema` | Native schemas (public vocabulary) |
+| `backplane_json_schema` | 1.10.76 | `Formata.JSONSchema` | JSON Schema compile/validate |
+| `ex_json_pointer` | 0.9.0 | `Formata.JSONPointer` | JSON Pointer for the JSON Schema backend |
 
 Fork rules: no compile-time optional integrations (their presence would depend
 on the consumer's dependency tree), no application environment, no processes.
@@ -64,7 +66,7 @@ CI tests Elixir 1.18 and 1.20.
 
 ## Audit findings and decisions
 
-### `Formata.Backplane.Schema.validate/3` transforms
+### `Formata.NativeSchema.validate/3` transforms
 
 It applies defaults, coercions and transforms, and in strict mode drops
 undeclared fields and re-keys output by schema keys; permissive mode leaves
@@ -97,7 +99,7 @@ is refused because it calls `String.to_atom/1` on input.
 
 ### JSON Schema
 
-Documents go straight to `Formata.Backplane.JsonSchema.compile/2`; the native
+Documents go straight to `Formata.JSONSchema.compile/2`; the native
 `from_json_schema` importer (which turns `oneOf` into a first-match union) is
 not used, nor is native export (which omits unsupported constraints). No
 schema export is offered: the fork's native `to_json_schema/2`
@@ -131,7 +133,7 @@ tests) and are not part of the public API.
 
 ### Codecs
 
-* JSON: `Formata.Jason` silently keeps the last duplicate key; Formata decodes ordered
+* JSON: `Formata.JSON.Backend` silently keeps the last duplicate key; Formata decodes ordered
   objects and rejects duplicates.
 * TOML: `gsmlg_toml` had no encoder, so Formata ships its own. The forked
   decoder had four bugs found by toml-test (gsmlg-dev/gsmlg_umbrella#13 offset
@@ -156,13 +158,13 @@ tests) and are not part of the public API.
   independent checks and the pinned official fixture selection.
 * JSON decode options (`comments`, `trailing_commas`): see "JSON extensions"
   below.
-* Special floats use the atoms produced by `Formata.Toml`
+* Special floats use the atoms produced by `Formata.TOML`
   (`:infinity`, `:negative_infinity`, `:nan`); YAML's `:"+inf"`/`:"-inf"` are
-  normalized to them and converted back for `Formata.Ymlr`.
+  normalized to them and converted back for `Formata.YAML.Writer`.
 
 ### JSON extensions (comments, trailing commas)
 
-* The extensions live in the `Formata.Jason` decoder, not in a pre-pass. A
+* The extensions live in the `Formata.JSON.Backend` decoder, not in a pre-pass. A
   `/` clause was added to every bytecase position that accepts whitespace
   (`value`, `array`, `object`, `key`, `terminate`); it consumes a `//` or
   `/* */` comment when `comments` is set and is an error otherwise. Comments
@@ -185,7 +187,7 @@ tests) and are not part of the public API.
 ### Incremental JSON parser
 
 `Formata.Codec.JSON.Stream` is a separate state machine
-(the internal `Stream.Machine` module). The one-shot `Formata.Jason` decoder
+(the internal `Stream.Machine` module). The one-shot `Formata.JSON.Backend` decoder
 was not reused: it is a recursive parse over one binary with no resumable
 state, and making it resumable would slow the common path. Agreement is
 enforced by differential tests instead (every two-way split, byte-by-byte
@@ -217,7 +219,7 @@ and random chunkings, strict and extended inputs).
   depth.
 * Limits (`max_depth` 1024, `max_document_bytes` 64 MiB, `max_token_bytes`
   8 MiB) return `:parse` / `:limit_exceeded` errors. The 1024-digit integer
-  limit of `Formata.Jason` also applies.
+  limit of `Formata.JSON.Backend` also applies.
 * Error codes: `:syntax`, `:incomplete` (input ended early; reported by
   `finish/1`), `:duplicate_key`, `:limit_exceeded`. Acceptance always
   matches `Formata.decode/3`; codes and some offsets can differ because the
@@ -377,7 +379,7 @@ implements them:
   Phoenix and LiveView pass atom keys and values and application structs;
   the strict portable domain rejects those by design. Structs use the
   standard `JSON.Encoder` protocol, so existing `@derive JSON.Encoder`
-  declarations keep working; the internal `Formata.Jason` fork and its
+  declarations keep working; the internal `Formata.JSON.Backend` fork and its
   protocol stay private.
 * Checked end to end with Phoenix 1.8.16 and Plug 1.20.3 (`Plug.Parsers`,
   `Phoenix.Controller.json/2`, `Phoenix.Socket.V2.JSONSerializer`).

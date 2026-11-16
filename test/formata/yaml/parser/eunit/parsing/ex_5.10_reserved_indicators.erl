@@ -1,0 +1,83 @@
+-module('formata_yaml_SUITE_parsing_ex_5.10_reserved_indicators').
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(FILENAME, "test/fixtures/yaml/parser/parsing/ex_5.10_reserved_indicators.yaml").
+
+single_test_() ->
+    ?_assertMatch(
+      {formata_yaml_parser,
+        {file,?FILENAME},
+        [],
+        <<>>,
+        41,
+        true,
+        [],
+        0,
+        42,
+        3,
+        1,
+        false,
+        2,
+        20,
+        utf8,
+        false,
+        undefined,
+        _,
+        _,
+        [],
+        {bcoll,root,0,-1,1,1,-1,1,1},
+        false,
+        false,
+        false,
+        [{impl_key,false,false,undefined,undefined,1,1}],
+        false,
+        false,
+        _,
+        [],
+        0,
+        15,
+        14,
+        undefined,
+        undefined,
+        _,
+        false,
+        [
+          {formata_yaml_parsing_error,warning,
+            "The reserved indicator \"`\" is not allowed at the beginning of a plain scalar",
+            2,15,reserved_indicator,
+            undefined,[]},
+          {formata_yaml_parsing_error,warning,
+            "The reserved indicator \"@\" is not allowed at the beginning of a plain scalar",
+            1,16,reserved_indicator,
+            undefined,[]}
+        ],
+        [
+          {formata_yaml_stream_end,2,20},
+          {formata_yaml_doc_end,2,20},
+          {formata_yaml_collection_end,2,20,block,mapping},
+          {formata_yaml_scalar,2,15,
+            {formata_yaml_tag,2,15,{non_specific,"?"}},
+            flow,plain,"`text"},
+          {formata_yaml_mapping_value,2,13},
+          {formata_yaml_scalar,2,1,
+            {formata_yaml_tag,2,1,{non_specific,"?"}},
+            flow,plain,"grave-accent"},
+          {formata_yaml_mapping_key,2,1},
+          {formata_yaml_scalar,1,16,
+            {formata_yaml_tag,1,16,{non_specific,"?"}},
+            flow,plain,"@text"},
+          {formata_yaml_mapping_value,1,14},
+          {formata_yaml_scalar,1,1,
+            {formata_yaml_tag,1,1,{non_specific,"?"}},
+            flow,plain,"commercial-at"},
+          {formata_yaml_mapping_key,1,1},
+          {formata_yaml_collection_start,1,1,
+            {formata_yaml_tag,1,1,{non_specific,"?"}},
+            block,mapping},
+          {formata_yaml_doc_start,1,1,{1,2},_},
+          {formata_yaml_stream_start,1,1,utf8}
+        ]
+      },
+      formata_yaml_parser:file(?FILENAME)
+    ).

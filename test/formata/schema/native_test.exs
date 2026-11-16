@@ -14,8 +14,7 @@ defmodule Formata.Schema.NativeTest do
     test "compiles definitions and keeps backend metadata" do
       definition = %{name: {:required, :string}}
 
-      assert {:ok,
-              %Schema{kind: :native, dialect: nil, backend: Formata.Backplane.Schema} = schema} =
+      assert {:ok, %Schema{kind: :native, dialect: nil, backend: Formata.NativeSchema} = schema} =
                Schema.compile(:native, definition)
 
       assert schema.compiled == definition
@@ -35,7 +34,7 @@ defmodule Formata.Schema.NativeTest do
                Schema.compile(:xsd, %{})
     end
 
-    test "composition helpers delegate to Formata.Backplane.Schema" do
+    test "composition helpers delegate to Formata.NativeSchema" do
       base = %{name: :string, age: :integer}
 
       assert {:ok, %{name: :string, age: :integer, email: :string}} =
@@ -87,7 +86,7 @@ defmodule Formata.Schema.NativeTest do
 
       assert Enum.all?(
                errors,
-               &(&1.kind == :validation and &1.backend == Formata.Backplane.Schema)
+               &(&1.kind == :validation and &1.backend == Formata.NativeSchema)
              )
 
       by_path = Map.new(errors, &{&1.path, &1.code})
@@ -187,8 +186,8 @@ defmodule Formata.Schema.NativeTest do
     test "custom validators that return a new value are not accepted as pure" do
       schema = native!(%{"n" => {:enum, [10], type: {:custom, fn v -> {:ok, v * 10} end}}})
 
-      # Formata.Backplane.Schema itself would accept this by checking the modified value.
-      assert {:ok, _} = Formata.Backplane.Schema.validate(schema.compiled, %{"n" => 1})
+      # Formata.NativeSchema itself would accept this by checking the modified value.
+      assert {:ok, _} = Formata.NativeSchema.validate(schema.compiled, %{"n" => 1})
 
       assert {:error, [%Error{kind: :unsupported, code: :non_pure_custom, path: ["n"]}]} =
                Formata.validate(%{"n" => 1}, schema)
@@ -370,7 +369,7 @@ defmodule Formata.Schema.NativeTest do
     end
 
     test "a default can never satisfy a required field" do
-      # Formata.Backplane.Schema rejects this combination when the schema is checked.
+      # Formata.NativeSchema rejects this combination when the schema is checked.
       assert {:error, [%Error{kind: :schema, schema_path: ["port"]}]} =
                Schema.native(%{"port" => {:required, {:integer, {:default, 80}}}})
     end

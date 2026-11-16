@@ -27,8 +27,8 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
 
     for scalar <- strings do
       assert {:ok, %{"v" => ^scalar}} = Formata.decode("v: " <> scalar, :yaml), scalar
-      assert {:ok, %{"v" => ^scalar}} = Formata.YamlElixir.read_from_string("v: " <> scalar)
-      assert :error = :formata_yamerl_node_int.string_to_integer(String.to_charlist(scalar))
+      assert {:ok, %{"v" => ^scalar}} = Formata.YAML.Reader.read_from_string("v: " <> scalar)
+      assert :error = :formata_yaml_node_int.string_to_integer(String.to_charlist(scalar))
     end
 
     for {scalar, expected} <- [
@@ -42,7 +42,7 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
           {"0x1aB", 427}
         ] do
       assert {:ok, %{"v" => ^expected}} = Formata.decode("v: " <> scalar, :yaml)
-      assert expected == :formata_yamerl_node_int.string_to_integer(String.to_charlist(scalar))
+      assert expected == :formata_yaml_node_int.string_to_integer(String.to_charlist(scalar))
       assert {:ok, %{"v" => ^scalar}} = Formata.decode("v: '" <> scalar <> "'", :yaml)
     end
 
@@ -65,8 +65,8 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
                 }
               ]} = Formata.decode(input, :yaml)
 
-      assert {:error, %Formata.YamlElixir.ParsingError{type: :not_an_integer, line: 1}} =
-               Formata.YamlElixir.read_nodes_from_string(input)
+      assert {:error, %Formata.YAML.Reader.ParsingError{type: :not_an_integer, line: 1}} =
+               Formata.YAML.Reader.read_nodes_from_string(input)
     end
   end
 
@@ -109,7 +109,7 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
     }
 
     assert {:ok, ^expected} = Formata.decode(input, :yaml)
-    assert {:ok, %{nil => 1}} = Formata.YamlElixir.read_from_string("null: 1")
+    assert {:ok, %{nil => 1}} = Formata.YAML.Reader.read_from_string("null: 1")
 
     assert {:error, [%Error{kind: :encode, code: :invalid_key}]} =
              Formata.encode(%{nil => 1}, :yaml)
@@ -166,8 +166,10 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
     for key <- ["'<<'", "\"<<\"", "!!str <<", "!!str '<<'"] do
       input = key <> ": 1"
       assert {:ok, %{"<<" => 1}} = Formata.decode(input, :yaml)
-      assert {:ok, %{"<<" => 1}} = Formata.YamlElixir.read_from_string(input)
-      assert {:ok, %{"<<" => 1}} = Formata.YamlElixir.read_from_string(input, merge_anchors: true)
+      assert {:ok, %{"<<" => 1}} = Formata.YAML.Reader.read_from_string(input)
+
+      assert {:ok, %{"<<" => 1}} =
+               Formata.YAML.Reader.read_from_string(input, merge_anchors: true)
     end
 
     for key <- ["'<<'", "!!str <<"] do
@@ -195,7 +197,7 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
     c = [b, b]
     expected = %{"a" => a, "b" => b, "c" => c, "d" => [c, c]}
     assert {:ok, ^expected} = Formata.decode(@ladder, :yaml)
-    assert {:ok, ^expected} = Formata.YamlElixir.read_from_string(@ladder)
+    assert {:ok, ^expected} = Formata.YAML.Reader.read_from_string(@ladder)
 
     assert {:ok, %{"a" => %{"x" => 1}, "b" => %{"x" => 1}}} =
              Formata.decode("a: &a {x: 1}\nb: *a", :yaml)
@@ -301,7 +303,7 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
               }
             ]} = Formata.decode(input, :yaml)
 
-    assert {:ok, _} = Formata.YamlElixir.read_nodes_from_string(input)
+    assert {:ok, _} = Formata.YAML.Reader.read_nodes_from_string(input)
   end
 
   test "limits are validated and isolated to each call" do
@@ -434,8 +436,8 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
         ] do
       input = "a: \"" <> escape <> "\""
       assert {:ok, %{"a" => ^expected}} = Formata.decode(input, :yaml)
-      assert {:ok, %{"a" => ^expected}} = Formata.YamlElixir.read_from_string(input)
-      assert [[{~c"a", value}]] = :formata_yamerl_constr.string(input)
+      assert {:ok, %{"a" => ^expected}} = Formata.YAML.Reader.read_from_string(input)
+      assert [[{~c"a", value}]] = :formata_yaml_constr.string(input)
       assert List.to_string(value) == expected
     end
   end
@@ -446,8 +448,8 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
       first = binary_part(input, 0, split)
       rest = binary_part(input, split, byte_size(input) - split)
 
-      assert {:formata_yamerl_exception,
-              [{:formata_yamerl_parsing_error, :error, _, 1, 5, :invalid_escaped_character, _, _}]} =
+      assert {:formata_yaml_exception,
+              [{:formata_yaml_parsing_error, :error, _, 1, 5, :invalid_escaped_character, _, _}]} =
                catch_throw(parse_chunks(first, rest))
     end
 
@@ -456,7 +458,7 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
     for split <- 1..(byte_size(input) - 1) do
       first = binary_part(input, 0, split)
       rest = binary_part(input, split, byte_size(input) - split)
-      assert elem(parse_chunks(first, rest), 0) == :formata_yamerl_parser
+      assert elem(parse_chunks(first, rest), 0) == :formata_yaml_parser
     end
   end
 
@@ -472,19 +474,19 @@ defmodule Formata.Codec.YAMLDecodeBoundariesTest do
             ]} =
              Formata.decode(input, :yaml)
 
-    assert {:error, %Formata.YamlElixir.ParsingError{type: ^type, line: ^line, column: ^column}} =
-             Formata.YamlElixir.read_nodes_from_string(input)
+    assert {:error, %Formata.YAML.Reader.ParsingError{type: ^type, line: ^line, column: ^column}} =
+             Formata.YAML.Reader.read_nodes_from_string(input)
 
-    assert {:formata_yamerl_exception,
-            [{:formata_yamerl_parsing_error, :error, _, ^line, ^column, ^type, _, _}]} =
-             catch_throw(:formata_yamerl_parser.string(input))
+    assert {:formata_yaml_exception,
+            [{:formata_yaml_parsing_error, :error, _, ^line, ^column, ^type, _, _}]} =
+             catch_throw(:formata_yaml_parser.string(input))
   end
 
   defp parse_chunks(first, rest) do
     {:continue, parser} =
-      :formata_yamerl_parser.next_chunk(:formata_yamerl_parser.new(:test), first)
+      :formata_yaml_parser.next_chunk(:formata_yaml_parser.new(:test), first)
 
-    :formata_yamerl_parser.last_chunk(parser, rest)
+    :formata_yaml_parser.last_chunk(parser, rest)
   end
 
   defp indent(input), do: input |> String.split("\n") |> Enum.map_join("\n", &("  " <> &1))

@@ -1,4 +1,4 @@
-defmodule Formata.Toml.Lexer.Guards do
+defmodule Formata.TOML.Lexer.Guards do
   @moduledoc false
 
   defguard is_lowercase(c) when c >= ?a and c <= ?z

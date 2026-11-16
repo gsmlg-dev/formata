@@ -1,4 +1,4 @@
-defmodule Formata.Toml.Lexer do
+defmodule Formata.TOML.Lexer do
   @moduledoc false
 
   import __MODULE__.Guards

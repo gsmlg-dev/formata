@@ -1,6 +1,6 @@
 defmodule Formata.Codec.TOML do
   @moduledoc """
-  TOML codec: decoding with `Formata.Toml.decode/2` (forked from `gsmlg_toml`), encoding with
+  TOML codec: decoding with `Formata.TOML.decode/2` (forked from `gsmlg_toml`), encoding with
   `Formata.Codec.TOML.Encoder`.
 
   ## Decoding
@@ -11,7 +11,7 @@ defmodule Formata.Codec.TOML do
       `NaiveDateTime`.
     * Date-time separators are `T`, `t`, or exactly one ASCII space.
       Fractional seconds retain up to six digits; excess digits are truncated.
-    * Offset date-times become UTC `DateTime` values. `Formata.Toml` converts the
+    * Offset date-times become UTC `DateTime` values. `Formata.TOML` converts the
       instant to UTC, so the original offset (for example `-08:00`) is not
       preserved; the instant is.
     * Duplicate keys and table redefinitions are rejected by the decoder as
@@ -45,13 +45,13 @@ defmodule Formata.Codec.TOML do
   def decode(input, opts) when is_binary(input) and is_list(opts) do
     toml_opts = [keys: :strings] ++ Keyword.take(opts, [:filename])
 
-    case Formata.Toml.decode(input, toml_opts) do
+    case Formata.TOML.decode(input, toml_opts) do
       {:ok, data} ->
         {:ok, data}
 
       {:error, {:invalid_toml, message}} = error ->
         Error.error(:parse, :syntax, String.trim(message),
-          backend: Formata.Toml,
+          backend: Formata.TOML,
           format: :toml,
           location: location(message),
           cause: error
@@ -59,14 +59,14 @@ defmodule Formata.Codec.TOML do
 
       {:error, reason} = error ->
         Error.error(:parse, :syntax, "invalid TOML: #{inspect(reason)}",
-          backend: Formata.Toml,
+          backend: Formata.TOML,
           format: :toml,
           cause: error
         )
     end
   end
 
-  # Formata.Toml embeds "on line N" and "at column M" in its messages.
+  # Formata.TOML embeds "on line N" and "at column M" in its messages.
   defp location(message) do
     line = Regex.run(~r/on line (\d+)/, message, capture: :all_but_first)
     column = Regex.run(~r/at column (\d+)/, message, capture: :all_but_first)

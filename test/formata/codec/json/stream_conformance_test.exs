@@ -1,6 +1,6 @@
 defmodule Formata.Codec.JSON.StreamConformanceTest do
   # JSONTestSuite (https://github.com/nst/JSONTestSuite, MIT), vendored with
-  # the Jason fork's tests (see test/fixtures/jason/PROVENANCE.md).
+  # the Jason fork's tests (see test/fixtures/json/backend/PROVENANCE.md).
   #
   # For every y_ (must accept), n_ (must reject), and i_ (implementation
   # defined) case, the stream parser must agree with Formata.decode/3 on
@@ -11,7 +11,7 @@ defmodule Formata.Codec.JSON.StreamConformanceTest do
 
   alias Formata.Codec.JSON.Stream, as: JSONStream
 
-  @files Path.wildcard("test/fixtures/jason/json_test_suite/*.json")
+  @files Path.wildcard("test/fixtures/json/backend/json_test_suite/*.json")
 
   test "the suite is present" do
     assert length(@files) > 300

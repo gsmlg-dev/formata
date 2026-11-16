@@ -5,8 +5,8 @@ Composable data codecs, schemas, and validation for Elixir.
 Formata decodes and encodes **JSON** (with opt-in comments and trailing
 commas, and an incremental parser for streamed output), **JSON5**, **TOML**,
 and **YAML**, validates data
-against **native schemas** (`Formata.Backplane.Schema`) or **JSON Schema** documents
-(Draft 7 and Draft 2020-12, via `Formata.Backplane.JsonSchema`), and keeps every
+against **native schemas** (`Formata.NativeSchema`) or **JSON Schema** documents
+(Draft 7 and Draft 2020-12, via `Formata.JSONSchema`), and keeps every
 lossy step explicit.
 
 It is a plain functional library: no processes, no global state, no caches.
@@ -27,13 +27,27 @@ built-in `JSON` module) and Erlang/OTP 28 or later. CI covers the minimum
 
 Formata has **no runtime dependencies**. Its backends are maintained forks,
 renamed into the `Formata` namespace so they never clash with the original
-packages in your project: `Formata.Jason` (from `jason`), `Formata.Toml`
-(`gsmlg_toml`), `Formata.YamlElixir` and `formata_yamerl` (`yaml_elixir`,
-`yamerl`), `Formata.Ymlr` (`ymlr`), `Formata.Backplane.Schema`
-(`backplane_schema`), `Formata.Backplane.JsonSchema` (`backplane_json_schema`),
-and `Formata.ExJSONPointer` (`ex_json_pointer`). Only `Formata.Backplane.Schema`
+packages in your project: `Formata.JSON.Backend` (from `jason`), `Formata.TOML`
+(`gsmlg_toml`), `Formata.YAML.Reader` and `formata_yaml` (`yaml_elixir`,
+`yamerl`), `Formata.YAML.Writer` (`ymlr`), `Formata.NativeSchema`
+(`backplane_schema`), `Formata.JSONSchema` (`backplane_json_schema`),
+and `Formata.JSONPointer` (`ex_json_pointer`). Only `Formata.NativeSchema`
 is public API (the native schema vocabulary); the other forks are internal.
 Versions, licenses, and modifications are listed in [NOTICE.md](NOTICE.md).
+
+### Namespace migration
+
+Native schema definitions now import `Formata.NativeSchema` instead of
+`Formata.Backplane.Schema`; its public error and walker modules are
+`Formata.NativeSchema.Error` and `Formata.NativeSchema.Walker`. The other
+backend modules also use Formata's own names, as listed above. Old backend
+module names have been removed without compatibility aliases. Recompile
+stored schema definitions after updating; compiled schema structs and error
+metadata now reference the new modules.
+
+Tests and helpers follow the same namespaces under `test/formata/` and
+`test/support/formata/`. Fixtures are grouped by backend under `test/fixtures/`;
+their `PROVENANCE.md` files retain the upstream sources and licenses.
 
 ## The workflow
 
@@ -111,7 +125,7 @@ Every expected failure is `{:error, errors}` with a non-empty list of
 ## Schemas
 
 Formata keeps the two schema systems separate. A JSON Schema document is
-always validated by `Formata.Backplane.JsonSchema` itself, never converted into a
+always validated by `Formata.JSONSchema` itself, never converted into a
 native schema; native schemas are never exported to JSON Schema in order to
 validate data. Formata does not offer schema export or general schema
 conversion.
@@ -122,17 +136,17 @@ reuse it.
 
 ### Native schemas
 
-Native definitions are `Formata.Backplane.Schema` data: maps of field names to types
+Native definitions are `Formata.NativeSchema` data: maps of field names to types
 such as `:string`, `{:integer, gte: 0}`, `{:required, t}`, `{:list, t}`,
 `{:enum, values}`, `{:either, {a, b}}`, `{:custom, fun}`, and nested maps. Atom
 schema keys match string data keys. Reusable and recursive definitions use
-`Formata.Backplane.Schema.defschema/3` with `{:ref, {Module, name}}`; definitions are
+`Formata.NativeSchema.defschema/3` with `{:ref, {Module, name}}`; definitions are
 data, so they can also be composed with `Formata.Schema.Native.merge/2`,
 `select/2`, and `except/2`.
 
 ```elixir
 iex> defmodule MyApp.Schemas do
-...>   import Formata.Backplane.Schema
+...>   import Formata.NativeSchema
 ...>   defschema :node, %{name: {:required, :string}, children: {:list, {:ref, :node}}}
 ...> end
 iex> {:ok, tree} = Formata.Schema.native({:ref, {MyApp.Schemas, :node}})
@@ -168,7 +182,7 @@ iex> {:error, [%Formata.Error{kind: :unsupported, code: :pure_validation_unsuppo
 ```
 
 For native schemas, pure validation supports a documented non-transforming
-subset of `Formata.Backplane.Schema`. Defaults, coercions, transforms, encoders, and
+subset of `Formata.NativeSchema`. Defaults, coercions, transforms, encoders, and
 run-time-computed schemas are rejected *before anything runs*, with the schema
 path of the construct. Custom validators run in the native engine and must
 return `:ok` or an error; one that returns a new value is reported as
@@ -332,11 +346,11 @@ Policies:
   date/time values with JSON Schema, convert them explicitly first
   (`temporal_to_iso8601/1`); otherwise validation reports `:non_json_value`.
 
-TOML is decoded by `Formata.Toml` and encoded by `Formata.Codec.TOML.Encoder`
+TOML is decoded by `Formata.TOML` and encoded by `Formata.Codec.TOML.Encoder`
 (TOML 1.0.0). Both are checked against the TOML 1.0.0 cases of the official
 `toml-test` suite: the decoder accepts all 208 valid documents with the
 expected values and rejects all 509 invalid ones, and every value from the
-valid cases is encoded and parsed again by `Formata.Toml` and by Python's
+valid cases is encoded and parsed again by `Formata.TOML` and by Python's
 `tomllib` as an independent parser.
 
 Date-times require `T`, `t`, or exactly one ASCII space between date and time.

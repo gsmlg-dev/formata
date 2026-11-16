@@ -38,7 +38,7 @@ defmodule Formata.Codec.YAMLConformanceTest do
         @external_resource expected
 
         test "official semantic input and emission: #{name}" do
-          expected = unquote(expected) |> File.read!() |> Formata.Jason.decode!()
+          expected = unquote(expected) |> File.read!() |> Formata.JSON.Backend.decode!()
           assert {:ok, ^expected} = Formata.decode(File.read!(unquote(input)), :yaml)
           assert {:ok, yaml} = Formata.encode(expected, :yaml)
           assert {:ok, ^expected} = Formata.decode(yaml, :yaml)

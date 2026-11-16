@@ -14,7 +14,7 @@ defmodule Formata.Codec.YAMLEmissionBoundariesTest do
   end
 
   defp assert_roundtrip(data) do
-    for encode <- [&Formata.Ymlr.document/1, &Formata.encode(&1, :yaml)] do
+    for encode <- [&Formata.YAML.Writer.document/1, &Formata.encode(&1, :yaml)] do
       assert {:ok, yaml} = encode.(data)
       assert {:ok, ^data} = Formata.decode(yaml, :yaml)
       assert :binary.match(yaml, <<0>>) == :nomatch
@@ -22,7 +22,7 @@ defmodule Formata.Codec.YAMLEmissionBoundariesTest do
   end
 
   test "root null is emitted as YAML null while the string nil stays a string" do
-    assert {:ok, "---\nnull\n"} = Formata.Ymlr.document(nil)
+    assert {:ok, "---\nnull\n"} = Formata.YAML.Writer.document(nil)
     assert {:ok, "---\nnull\n"} = Formata.encode(nil, :yaml)
 
     for value <- [nil, "nil", "", [], %{}, true, false, 42, 0.5], data <- contexts(value) do

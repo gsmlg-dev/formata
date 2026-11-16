@@ -12,7 +12,7 @@
   - `remotes/**` ← `remotes/**`, without the `draft3`, `draft4`, `draft6`,
     `draft2019-09` and `v1` subdirectories, which no included test references
   - `COMMIT` — the commit above (written for the runner, not part of the suite)
-- Used by: `test/formata/vendor/backplane_json_schema/conformance_test.exs`.
+- Used by: `test/formata/json_schema/conformance_test.exs`.
 
 ## License
 

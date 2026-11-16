@@ -2,7 +2,7 @@ defmodule Formata.Codec.TOMLBoundaryTest do
   use ExUnit.Case, async: true
 
   alias Formata.Error
-  alias Formata.Toml.Lexer
+  alias Formata.TOML.Lexer
 
   test "comments cannot supply an assignment's missing value across a newline" do
     for input <- comment_invalid_cases() do
@@ -140,11 +140,14 @@ defmodule Formata.Codec.TOMLBoundaryTest do
         "-I",
         "-c",
         script,
-        Formata.Jason.encode!(inputs)
+        Formata.JSON.Backend.encode!(inputs)
       ])
 
     assert status == 0, output
-    %{"inline_comments" => inline_comments, "results" => results} = Formata.Jason.decode!(output)
+
+    %{"inline_comments" => inline_comments, "results" => results} =
+      Formata.JSON.Backend.decode!(output)
+
     assert length(results) == length(inputs)
     {valid_results, invalid_results} = Enum.split(results, length(valid))
 
@@ -167,12 +170,12 @@ defmodule Formata.Codec.TOMLBoundaryTest do
   end
 
   defp assert_valid(input, expected) do
-    assert {:ok, ^expected} = Formata.Toml.decode(input), input
+    assert {:ok, ^expected} = Formata.TOML.decode(input), input
     assert {:ok, ^expected} = Formata.decode(input, :toml), input
   end
 
   defp assert_invalid(input) do
-    assert {:error, {:invalid_toml, message}} = Formata.Toml.decode(input), input
+    assert {:error, {:invalid_toml, message}} = Formata.TOML.decode(input), input
     assert is_binary(message)
 
     assert {:error,
@@ -181,7 +184,7 @@ defmodule Formata.Codec.TOMLBoundaryTest do
                 kind: :parse,
                 code: :syntax,
                 path: [],
-                backend: Formata.Toml,
+                backend: Formata.TOML,
                 format: :toml,
                 location: %{line: line, column: column}
               }

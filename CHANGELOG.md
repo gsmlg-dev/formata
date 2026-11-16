@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Remove the imported backend namespaces without compatibility aliases.
+  Native schema definitions now use `Formata.NativeSchema` (including its
+  `Error` and `Walker` modules); `Formata.Schema.Native` remains the adapter
+  for compilation, pure validation, and casting. Recompile existing schemas
+  to replace backend module references in compiled structs.
+- Rename internal backends to `Formata.JSON.Backend`, `Formata.TOML`,
+  `Formata.YAML.Reader`, `Formata.YAML.Writer`, `Formata.JSONSchema`, and
+  `Formata.JSONPointer`. Erlang YAML modules, records, and headers use
+  `formata_yaml` names. Error metadata reflects the new backend modules;
+  serialized YAML tag URIs and upstream license attribution are preserved.
+- Align test files, helper modules, and fixture directories with the current
+  backend namespaces. Ported suites now live alongside the corresponding
+  module tests, without a separate vendor test namespace.
+
 ## [0.3.3] - 2026-11-14
 
 ### Fixed

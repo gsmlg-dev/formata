@@ -1,11 +1,11 @@
-defmodule Formata.Toml.Builder do
+defmodule Formata.TOML.Builder do
   @moduledoc false
 
   @compile inline: [key: 3, keys: 2, comment: 2, open: 2, close: 1, to_result: 1]
 
   # Builds a Document, performing validation along the way
 
-  alias Formata.Toml.Document
+  alias Formata.TOML.Document
 
   @doc """
   Creates a new empty TOML document to build with.

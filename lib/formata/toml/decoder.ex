@@ -1,9 +1,9 @@
-defmodule Formata.Toml.Decoder do
+defmodule Formata.TOML.Decoder do
   @moduledoc false
 
-  alias Formata.Toml.Document
-  alias Formata.Toml.Builder
-  alias Formata.Toml.Lexer
+  alias Formata.TOML.Document
+  alias Formata.TOML.Builder
+  alias Formata.TOML.Lexer
 
   @compile :inline_list_funs
   @compile inline: [
@@ -17,9 +17,9 @@ defmodule Formata.Toml.Decoder do
   @doc """
   Decodes a raw binary into a map.
 
-  `Formata.Toml.Error` is raised if decoding fails.
+  `Formata.TOML.Error` is raised if decoding fails.
   """
-  @spec decode!(binary, Formata.Toml.opts()) :: map | no_return
+  @spec decode!(binary, Formata.TOML.opts()) :: map | no_return
   def decode!(bin, opts) when is_binary(bin) and is_list(opts) do
     # Raise if the filename is invalid
     filename =
@@ -43,18 +43,18 @@ defmodule Formata.Toml.Decoder do
               result
 
             {:error, reason} ->
-              raise Formata.Toml.Error, reason
+              raise Formata.TOML.Error, reason
           end
 
         {:error, reason, skip, lines} ->
-          raise Formata.Toml.Error, format_error(reason, bin, filename, skip, lines)
+          raise Formata.TOML.Error, format_error(reason, bin, filename, skip, lines)
       end
     catch
       :throw, {:error, {:invalid_toml, reason}} ->
-        raise Formata.Toml.Error, reason
+        raise Formata.TOML.Error, reason
 
       :throw, {:badarg, {option, value, valid}} ->
-        raise Formata.Toml.Error, {:badarg, option, value, valid}
+        raise Formata.TOML.Error, {:badarg, option, value, valid}
     after
       Lexer.stop(lexer)
     end
@@ -63,26 +63,26 @@ defmodule Formata.Toml.Decoder do
   @doc """
   Decodes a raw binary safely, returns `{:ok, map}` or `{:error, reason}`
   """
-  @spec decode(binary, Formata.Toml.opts()) :: {:ok, map} | Formata.Toml.error()
+  @spec decode(binary, Formata.TOML.opts()) :: {:ok, map} | Formata.TOML.error()
   def decode(bin, opts) when is_binary(bin) and is_list(opts) do
     {:ok, decode!(bin, opts)}
   rescue
-    err in [Formata.Toml.Error] ->
+    err in [Formata.TOML.Error] ->
       {:error, {:invalid_toml, Exception.message(err)}}
 
     err in [ArgumentError] ->
       {:error, err.message}
   catch
     :error, reason ->
-      {:error, Formata.Toml.Error.format_reason(reason)}
+      {:error, Formata.TOML.Error.format_reason(reason)}
   end
 
   @doc """
   Decodes a stream.
 
-  Raises `Formata.Toml.Error` if decoding fails.
+  Raises `Formata.TOML.Error` if decoding fails.
   """
-  @spec decode_stream!(Enumerable.t(), Formata.Toml.opts()) :: map | no_return
+  @spec decode_stream!(Enumerable.t(), Formata.TOML.opts()) :: map | no_return
   def decode_stream!(stream, opts) do
     decode!(Enum.into(stream, <<>>), opts)
   end
@@ -92,7 +92,7 @@ defmodule Formata.Toml.Decoder do
 
   Returns same type as `decode/2`
   """
-  @spec decode_stream(Enumerable.t(), Formata.Toml.opts()) :: {:ok, map} | Formata.Toml.error()
+  @spec decode_stream(Enumerable.t(), Formata.TOML.opts()) :: {:ok, map} | Formata.TOML.error()
   def decode_stream(stream, opts) do
     decode(Enum.into(stream, <<>>), opts)
   end
@@ -100,9 +100,9 @@ defmodule Formata.Toml.Decoder do
   @doc """
   Decodes a file.
 
-  Raises `Formata.Toml.Error` if decoding fails.
+  Raises `Formata.TOML.Error` if decoding fails.
   """
-  @spec decode_file!(String.t(), Formata.Toml.opts()) :: map | no_return
+  @spec decode_file!(String.t(), Formata.TOML.opts()) :: map | no_return
   def decode_file!(path, opts) when is_binary(path) do
     with {:ok, opts} <- set_filename_opt(opts, path),
          bin = File.read!(path) do
@@ -115,7 +115,7 @@ defmodule Formata.Toml.Decoder do
 
   Returns same type as `decode/2`
   """
-  @spec decode_file(String.t(), Formata.Toml.opts()) :: {:ok, map} | Formata.Toml.error()
+  @spec decode_file(String.t(), Formata.TOML.opts()) :: {:ok, map} | Formata.TOML.error()
   def decode_file(path, opts) when is_binary(path) do
     with {:ok, opts} <- set_filename_opt(opts, path),
          {:ok, bin} <- File.read(path) do
@@ -148,7 +148,7 @@ defmodule Formata.Toml.Decoder do
   # Converts an error into a friendly, printable representation
   defp format_error(reason, original, filename, skip, lines) do
     msg =
-      "#{Formata.Toml.Error.format_reason(reason)} in #{Path.relative_to_cwd(filename)} on line #{lines}"
+      "#{Formata.TOML.Error.format_reason(reason)} in #{Path.relative_to_cwd(filename)} on line #{lines}"
 
     {ctx, pos} = seek_line(original, skip - 1, lines)
 
