@@ -6,6 +6,15 @@ defmodule Formata.Codec.JSONTest do
   doctest Formata.Codec.JSON
 
   describe "decode" do
+    test "application JSON extensions do not widen the portable codec domain" do
+      for opts <- [[floats: &Function.identity/1], [objects: :ordered_objects]] do
+        assert {:error, [%Error{code: :invalid_option}]} = Formata.decode("{}", :json, opts)
+      end
+
+      assert {:error, [%Error{code: :unrepresentable}]} =
+               Formata.encode(Formata.JSON.OrderedObject.new([{"a", 1}]), :json)
+    end
+
     test "objects keep string keys, arrays and scalar roots are preserved" do
       assert {:ok, %{"a" => [1, 2.5, nil, true], "b" => %{"c" => "x"}}} =
                Formata.decode(~s({"a":[1,2.5,null,true],"b":{"c":"x"}}), :json)

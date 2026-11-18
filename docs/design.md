@@ -18,7 +18,7 @@ umbrella, schema AST, schema inference, or schema conversion.
 | `Formata.Schema` | `compile/3`, `check/3`, compiled-schema struct |
 | `Formata.Schema.Native` | `Formata.NativeSchema` adapter, pure-validation preflight, casting |
 | `Formata.Schema.JSONSchema` | `Formata.JSONSchema` adapter |
-| `Formata.JSON` | Phoenix/Plug JSON library module (strict decode, `JSON` encode) |
+| `Formata.JSON` | Application/Phoenix/Plug JSON (strict decode, exact float callbacks, ordered objects, `JSON.Encoder`, pretty output) |
 | `Formata.Transform` | Explicit data transformations |
 | `Formata.Error` | Structured errors |
 
@@ -372,15 +372,30 @@ Phoenix requires `decode!/1`, `encode!/1`, and `encode_to_iodata!/1` of its
 calls `decode!/1`, or `decode!/2` through an MFA tuple. `Formata.JSON`
 implements them:
 
-* Decoding is `Formata.decode/3` with `:json`, so request bodies and socket
-  messages get the same guarantees as other Formata input: RFC 8259, string
-  keys, and duplicate keys rejected. The first `Formata.Error` is raised.
+* Decoding shares the strict decoder with the portable codec, so request
+  bodies and socket messages get the same defaults: RFC 8259, string keys,
+  and duplicate keys rejected. `decode/2` returns structured errors and
+  `decode!/2` raises the first `Formata.Error`.
 * Encoding delegates to Elixir's `JSON` rather than Formata's strict encoder.
   Phoenix and LiveView pass atom keys and values and application structs;
   the strict portable domain rejects those by design. Structs use the
   standard `JSON.Encoder` protocol, so existing `@derive JSON.Encoder`
   declarations keep working; the internal `Formata.JSON.Backend` fork and its
   protocol stay private.
+* Application-only decode options add `floats: &Decimal.new/1` (or another
+  one-argument callback) and `objects: :ordered_objects`. The number callback
+  receives the original fractional/exponent token, without float conversion;
+  integers remain integers and callback exceptions propagate. Decimal stays
+  a consumer dependency, with no compile-time optional integration.
+* The existing ordered-object implementation is public as
+  `Formata.JSON.OrderedObject`, with `Access`, `Enumerable`, and Elixir's
+  `JSON.Encoder`. Duplicate detection still walks every object before
+  returning either maps or ordered objects. Ordered encoding uses OTP's
+  checked key-value-list encoder to reject encoded key collisions.
+* `pretty: true` formats Elixir JSON's encoded iodata with the existing JSON
+  formatter, preserving its protocol support and ordered pairs. Unknown or
+  invalid options raise `Formata.Error` (`:unsupported` / `:invalid_option`).
+  The portable codec's value domain and accepted options are unchanged.
 * Checked end to end with Phoenix 1.8.16 and Plug 1.20.3 (`Plug.Parsers`,
   `Phoenix.Controller.json/2`, `Phoenix.Socket.V2.JSONSerializer`).
 

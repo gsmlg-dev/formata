@@ -8,7 +8,7 @@ the Hex package.
 
 | Upstream package | Version | Source | License | Formata location |
 | --- | --- | --- | --- | --- |
-| `jason` | 1.4.5 | https://github.com/michalmuskala/jason (tag `v1.4.5`, `4ede428`) | Apache-2.0 ([`LICENSES/jason.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/jason.txt), [`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.JSON.Backend*` — `lib/formata/json/backend*` |
+| `jason` | 1.4.5 | https://github.com/michalmuskala/jason (tag `v1.4.5`, `4ede428`) | Apache-2.0 ([`LICENSES/jason.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/jason.txt), [`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.JSON.Backend*`, `Formata.JSON.OrderedObject` — `lib/formata/json/backend*`, `lib/formata/json/ordered_object.ex` |
 | `gsmlg_toml` | 1.0.0 | https://github.com/gsmlg-dev/gsmlg_umbrella (`apps/gsmlg_toml`; no release tag — `lib/` identical to the Hex release at `ce41864` except the unforked `provider.ex`) | Apache-2.0 (package metadata; the repository `LICENSE` at `ce41864` is Apache-2.0 followed by a retained MIT notice) — the Hex 1.0.0 release shipped only the MIT notice ([`LICENSES/gsmlg_toml.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/gsmlg_toml.txt)); both texts are included ([`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.TOML*` — `lib/formata/toml*` |
 | `yaml_elixir` | 2.12.2 | https://github.com/KamilLelonek/yaml-elixir (tag `v2.12.2`, `4c5ee04`) | MIT ([`LICENSES/yaml_elixir.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/yaml_elixir.txt)) | `Formata.YAML.Reader*` — `lib/formata/yaml/reader*` |
 | `yamerl` | 0.10.0 | https://github.com/yakaz/yamerl (tag `v0.10.0`, `39981b9`) | BSD-2-Clause ([`LICENSES/yamerl.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/yamerl.txt)) | `formata_yaml*` — `src/`, `include/` |
@@ -43,6 +43,10 @@ Bug fixes made in Formata after forking are listed in `CHANGELOG.md`.
 
 - `Formata.JSON.Backend` decoder: opt-in `comments` and `trailing_commas` decode
   options (default `false`), used by `Formata.Codec.JSON`.
+- Float-token callbacks for application JSON number conversion without a
+  compile-time Decimal integration; exponent tokens retain the negative-zero sign.
+- Promote the ordered-object wrapper to `Formata.JSON.OrderedObject` and add
+  Elixir `JSON.Encoder` support using OTP's checked key-value-list encoder.
 
 ## Original implementation
 

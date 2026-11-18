@@ -14,7 +14,7 @@ defmodule Formata.JSON.Backend do
 
   @type strings :: :reference | :copy
 
-  @type floats :: :native | :decimals
+  @type floats :: :native | (String.t() -> term)
 
   @type objects :: :maps | :ordered_objects
 
@@ -49,12 +49,13 @@ defmodule Formata.JSON.Backend do
     * `:floats` - controls how floats are decoded. Possible values are:
 
       * `:native` (default) - Native conversion from binary to float using `:erlang.binary_to_float/1`,
-      * `:decimals` - not available in the Formata fork (raises `ArgumentError`).
+      * a one-argument function - receives the original number token, without
+        converting through a binary float (for example, `&Decimal.new/1`).
 
     * `:objects` - controls how objects are decoded. Possible values are:
 
       * `:maps` (default) - objects are decoded as maps
-      * `:ordered_objects` - objects are decoded as `Formata.JSON.Backend.OrderedObject` structs
+      * `:ordered_objects` - objects are decoded as `Formata.JSON.OrderedObject` structs
 
     * `:comments` - Formata fork: when `true`, accept `//` line comments and
       non-nesting `/* */` block comments wherever whitespace is allowed

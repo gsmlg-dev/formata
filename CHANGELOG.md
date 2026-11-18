@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Application JSON APIs for internal request #1: `Formata.JSON.decode/2`
+  returns structured errors and accepts exact float-token callbacks (such as
+  `floats: &Decimal.new/1`) and `objects: :ordered_objects`. Both decode
+  variants preserve strict duplicate-key rejection; the portable codecs
+  retain their existing value domain and options.
+- Public `Formata.JSON.OrderedObject` with `Access`, `Enumerable`, and
+  `JSON.Encoder` support for order-preserving configuration edits. Encoding
+  rejects duplicate encoded keys.
+- `pretty: true` on `Formata.JSON.encode!/2` and `encode_to_iodata!/2`,
+  including atom keys/values, standard temporal values, derived structs,
+  and nested ordered objects.
+
 ### Changed
 
 - Remove the imported backend namespaces without compatibility aliases.

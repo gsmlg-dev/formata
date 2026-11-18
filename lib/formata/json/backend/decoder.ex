@@ -98,7 +98,7 @@ defmodule Formata.JSON.Backend.Decoder do
   defp object_decode_function(%{objects: :maps}), do: &:maps.from_list/1
 
   defp object_decode_function(%{objects: :ordered_objects}),
-    do: &Formata.JSON.Backend.OrderedObject.new(:lists.reverse(&1))
+    do: &Formata.JSON.OrderedObject.new(:lists.reverse(&1))
 
   defp float_decode_function(%{floats: :native}) do
     fn string, token, skip ->
@@ -114,6 +114,12 @@ defmodule Formata.JSON.Backend.Decoder do
   # Formata fork: Decimal support removed (Formata has no runtime dependencies).
   defp float_decode_function(%{floats: :decimals}) do
     raise ArgumentError, ":decimals option is not available in Formata.JSON.Backend"
+  end
+
+  # Use the original token, including exponent spelling and trailing zeros.
+  # `string` may have been normalized for the native float converter.
+  defp float_decode_function(%{floats: fun}) when is_function(fun, 1) do
+    fn _string, token, _skip -> fun.(token) end
   end
 
   defp value(data, original, skip, stack, decode) do
@@ -328,7 +334,8 @@ defmodule Formata.JSON.Backend.Decoder do
   end
 
   defp number_zero(<<e, rest::bits>>, original, skip, stack, decode, len) when e in ~c'eE' do
-    number_exp_copy(rest, original, skip + len + 1, stack, decode, "0")
+    prefix = binary_part(original, skip, len)
+    number_exp_copy(rest, original, skip + len + 1, stack, decode, prefix)
   end
 
   defp number_zero(<<rest::bits>>, original, skip, stack, decode, len) do

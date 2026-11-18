@@ -59,7 +59,7 @@ defmodule Formata.Codec.JSON do
 
   def decode(input, opts) when is_binary(input) and is_list(opts) do
     with :ok <- check_decode_options(opts) do
-      do_decode(input, opts)
+      Formata.JSON.Decoder.decode(input, opts)
     end
   end
 
@@ -70,67 +70,6 @@ defmodule Formata.Codec.JSON do
 
   defp check_decode_options(opts),
     do: Formata.Codec.check_options(opts, @decode_options, backend: __MODULE__, format: :json)
-
-  defp do_decode(input, opts) do
-    decoder_opts = [
-      objects: :ordered_objects,
-      comments: Keyword.get(opts, :comments, false),
-      trailing_commas: Keyword.get(opts, :trailing_commas, false)
-    ]
-
-    case Formata.JSON.Backend.decode(input, decoder_opts) do
-      {:ok, value} ->
-        case unorder(value, []) do
-          {:ok, data} -> {:ok, data}
-          {:error, error} -> {:error, [error]}
-        end
-
-      {:error, %Formata.JSON.Backend.DecodeError{position: position} = error} ->
-        Error.error(:parse, :syntax, Exception.message(error),
-          backend: Formata.JSON.Backend,
-          format: :json,
-          location: Formata.Codec.offset_location(input, position),
-          cause: error
-        )
-    end
-  end
-
-  defp unorder(%Formata.JSON.Backend.OrderedObject{values: pairs}, path) do
-    Enum.reduce_while(pairs, {:ok, %{}}, fn {key, value}, {:ok, acc} ->
-      if Map.has_key?(acc, key) do
-        {:halt,
-         {:error,
-          Error.new(:parse, :duplicate_key, "duplicate object key #{inspect(key)}",
-            backend: Formata.JSON.Backend,
-            format: :json,
-            path: Enum.reverse(path),
-            details: %{key: key}
-          )}}
-      else
-        case unorder(value, [key | path]) do
-          {:ok, value} -> {:cont, {:ok, Map.put(acc, key, value)}}
-          error -> {:halt, error}
-        end
-      end
-    end)
-  end
-
-  defp unorder(list, path) when is_list(list) do
-    list
-    |> Enum.with_index()
-    |> Enum.reduce_while({:ok, []}, fn {item, i}, {:ok, acc} ->
-      case unorder(item, [i | path]) do
-        {:ok, item} -> {:cont, {:ok, [item | acc]}}
-        error -> {:halt, error}
-      end
-    end)
-    |> case do
-      {:ok, items} -> {:ok, Enum.reverse(items)}
-      error -> error
-    end
-  end
-
-  defp unorder(value, _path), do: {:ok, value}
 
   @profile %{
     format: :json,

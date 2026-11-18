@@ -122,7 +122,7 @@ defmodule Formata.JSON.Backend.EncoderTest do
   # Formata fork: upstream test "Decimal" dropped -- Decimal support was removed.
 
   test "OrderedObject" do
-    import Formata.JSON.Backend.OrderedObject, only: [new: 1]
+    import Formata.JSON.OrderedObject, only: [new: 1]
 
     assert to_json(new([])) == "{}"
     assert to_json(new([{"foo", "bar"}])) == ~s({"foo":"bar"})
@@ -229,12 +229,12 @@ defmodule Formata.JSON.Backend.EncoderTest do
   end
 
   test "pretty: true" do
-    object = Formata.JSON.Backend.OrderedObject.new(a: 3.14159, b: 1)
+    object = Formata.JSON.OrderedObject.new(a: 3.14159, b: 1)
     assert to_json(object, pretty: true) == ~s|{\n  "a": 3.14159,\n  "b": 1\n}|
   end
 
   test "pretty: false" do
-    object = Formata.JSON.Backend.OrderedObject.new(a: 3.14159, b: 1)
+    object = Formata.JSON.OrderedObject.new(a: 3.14159, b: 1)
     assert to_json(object, pretty: false) == ~s|{"a":3.14159,"b":1}|
   end
 

@@ -1,7 +1,8 @@
 defmodule Formata.JSON.Backend.HelpersTest do
   use ExUnit.Case, async: true
 
-  alias Formata.JSON.Backend.{OrderedObject, Helpers, Fragment, EncodeError}
+  alias Formata.JSON.OrderedObject
+  alias Formata.JSON.Backend.{Helpers, Fragment, EncodeError}
   import Helpers
 
   doctest Helpers

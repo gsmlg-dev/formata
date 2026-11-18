@@ -77,7 +77,7 @@ defmodule Formata.MixProject do
           Formata.NativeSchema.Error,
           Formata.NativeSchema.Walker
         ],
-        Support: [Formata.JSON, Formata.Transform, Formata.Error]
+        Support: [Formata.JSON, Formata.JSON.OrderedObject, Formata.Transform, Formata.Error]
       ],
       filter_modules: &public_module?/2,
       skip_code_autolink_to: &internal_reference?/1

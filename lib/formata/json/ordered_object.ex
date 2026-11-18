@@ -1,17 +1,29 @@
-defmodule Formata.JSON.Backend.OrderedObject do
-  @doc """
-  Struct implementing a JSON object retaining order of properties.
+defmodule Formata.JSON.OrderedObject do
+  @moduledoc """
+  A JSON object retaining property order through decoding, edits, and encoding.
 
   A wrapper around a keyword (that supports non-atom keys) allowing for
   proper protocol implementations.
 
   Implements the `Access` behaviour and `Enumerable` protocol with
   complexity similar to keywords/lists.
+
+  Decode with `Formata.JSON.decode/2` using `objects: :ordered_objects`,
+  or construct with `new/1`. Keys decoded from JSON are always strings.
+  Updating an existing key keeps its position; adding a key through `Access`
+  prepends it. `pop_in/1` removes a key without reordering the others.
+
+  Implements Elixir's `JSON.Encoder`, so ordered objects may also appear
+  inside maps, lists, and structs that derive that protocol. Encoding rejects
+  duplicate keys, including keys that become equal when encoded (such as
+  `:name` and `"name"`), with an `ErlangError` containing `{:duplicate_key, key}`.
+  Like Elixir's JSON maps, encoding supports string, atom, and numeric keys.
   """
 
   @behaviour Access
 
-  @type t :: %__MODULE__{values: [{String.Chars.t(), term()}]}
+  @type key :: String.t() | atom | number
+  @type t :: %__MODULE__{values: [{key, term()}]}
 
   defstruct values: []
 
@@ -22,8 +34,8 @@ defmodule Formata.JSON.Backend.OrderedObject do
 
       iex> %{a: 1, c: 3, b: 2}
       ...> |> Enum.sort()
-      ...> |> Formata.JSON.Backend.OrderedObject.new()
-      ...> |> Formata.JSON.Backend.encode!()
+      ...> |> Formata.JSON.OrderedObject.new()
+      ...> |> Formata.JSON.encode!()
       "{\"a\":1,\"b\":2,\"c\":3}"
 
   """
@@ -86,7 +98,13 @@ defmodule Formata.JSON.Backend.OrderedObject do
   defp delete_key([], _key), do: []
 end
 
-defimpl Enumerable, for: Formata.JSON.Backend.OrderedObject do
+defimpl JSON.Encoder, for: Formata.JSON.OrderedObject do
+  def encode(%{values: values}, encoder) do
+    :json.encode_key_value_list_checked(values, encoder)
+  end
+end
+
+defimpl Enumerable, for: Formata.JSON.OrderedObject do
   def count(%{values: []}), do: {:ok, 0}
   def count(_obj), do: {:error, __MODULE__}
 
@@ -99,7 +117,7 @@ defimpl Enumerable, for: Formata.JSON.Backend.OrderedObject do
   def reduce(%{values: values}, acc, fun), do: Enumerable.List.reduce(values, acc, fun)
 end
 
-defimpl Formata.JSON.Backend.Encoder, for: Formata.JSON.Backend.OrderedObject do
+defimpl Formata.JSON.Backend.Encoder, for: Formata.JSON.OrderedObject do
   def encode(%{values: values}, opts) do
     Formata.JSON.Backend.Encode.keyword(values, opts)
   end

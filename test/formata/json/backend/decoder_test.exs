@@ -125,7 +125,7 @@ defmodule Formata.JSON.Backend.DecoderTest do
   end
 
   test "decoding objects preserving order" do
-    import Formata.JSON.Backend.OrderedObject, only: [new: 1]
+    import Formata.JSON.OrderedObject, only: [new: 1]
 
     assert parse!("{}", objects: :ordered_objects) == new([])
     assert parse!(~s({"foo": "bar"}), objects: :ordered_objects) == new([{"foo", "bar"}])

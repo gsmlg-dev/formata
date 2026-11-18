@@ -306,6 +306,39 @@ iex> Formata.JSON.decode!(~s({"items": [1, null]}))
 %{"items" => [1, nil]}
 ```
 
+For application JSON (outside the portable codec domain), `Formata.JSON`
+also supports exact number conversion, ordered configuration edits, and
+pretty output of Elixir values:
+
+```elixir
+# Decimal is supplied by your application; Formata has no runtime dependencies.
+{:ok, %{"amount" => amount}} =
+  Formata.JSON.decode(~s({"amount":0.1234567890123456789}), floats: &Decimal.new/1)
+Decimal.to_string(amount) # "0.1234567890123456789"
+
+config = Formata.JSON.decode!(~s({"z":1,"a":2}), objects: :ordered_objects)
+updated = put_in(config["a"], 3)
+Formata.JSON.encode!(updated) # ~s({"z":1,"a":3})
+Formata.JSON.encode!(%{status: :ok}, pretty: true) # "{\n  \"status\": \"ok\"\n}"
+```
+
+The float callback receives the original token, including exponent spelling
+and trailing zeros; integers remain integers. Callback exceptions propagate.
+Ordered decoding returns `Formata.JSON.OrderedObject` recursively. It supports
+`Access` and `Enumerable`; editing an existing key or removing a key preserves
+the order of unrelated fields. Encoding supports ordered objects nested in
+maps, lists, and structs implementing `JSON.Encoder`.
+
+`decode/2` returns `{:ok, data}` or `{:error, [Formata.Error.t()]}`;
+`decode!/2` raises the first error. Both reject duplicate keys, including
+escaped equivalents, with `:parse` / `:duplicate_key` and the object's path.
+Unknown options and invalid option values produce `:unsupported` /
+`:invalid_option`. Use `floats: &Decimal.new/1`, rather than `:decimals`.
+Both encoders accept only the boolean `:pretty` option (default `false`);
+invalid options raise `Formata.Error`, and unsupported values retain Elixir
+JSON's encoding exceptions. `Formata.decode/3` and `Formata.encode/3` keep
+their portable domain and options.
+
 ## Codecs and value domains
 
 Decoded data uses ordinary Elixir terms. Document keys stay strings and
