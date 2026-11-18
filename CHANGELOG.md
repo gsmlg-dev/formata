@@ -6,13 +6,26 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-11-18
+
 ### Added
 
+- Public JSON Schema document checking and strict registration preflight via
+  `Formata.Schema.JSONSchema.check_document/2` and `preflight/2` (#3).
+  Audits include unused branches, scoped IDs/anchors, recursive pointers,
+  explicit external registries/loaders and configurable resource limits.
+  Loaded resources are captured for subsequent offline validation.
 - Public native schema wire export and conservative Draft 7 import through
   `Formata.Schema.Native.to_json_schema/2` and `from_json_schema/2` (#2).
   Export supports metadata exclusion and explicit custom-validator omission;
   native unions use `anyOf`. Import rejects unsupported constraints and
   exclusive `oneOf`, with structured errors and string-only property keys.
+
+### Fixed
+
+- JSON Schema compilation checks built-in meta-schema keyword shapes,
+  returning structured schema errors for malformed constraints before
+  instance validation can raise.
 
 ## [0.3.4] - 2026-11-18
 

@@ -74,8 +74,7 @@ defmodule Formata.Schema.Native.Conversion do
 
   def import_schema(document, opts) do
     with :ok <- options(opts, [{:keys, &(&1 == :strings), ":strings"}]),
-         {:ok, _} <- Schema.json_schema(document, dialect: :draft7),
-         :ok <- check_meta(document) do
+         {:ok, _} <- Schema.json_schema(document, dialect: :draft7) do
       try do
         check_import(document, [])
 
@@ -92,25 +91,6 @@ defmodule Formata.Schema.Native.Conversion do
       catch
         {:conversion, path, message} -> unsupported(path, message)
       end
-    end
-  end
-
-  defp check_meta(document) do
-    {:ok, meta} =
-      Formata.JSONSchema.Draft7.Schemas.fetch("http://json-schema.org/draft-07/schema#")
-
-    {:ok, compiled} = Schema.json_schema(meta, dialect: :draft7, format_assertion: true)
-
-    case Formata.validate(document, compiled) do
-      :ok ->
-        :ok
-
-      {:error, errors} ->
-        {:error,
-         Enum.map(
-           errors,
-           &%{&1 | kind: :schema, code: :invalid_schema, schema_path: &1.path, path: []}
-         )}
     end
   end
 

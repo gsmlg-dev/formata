@@ -17,6 +17,40 @@ defmodule Formata.JSONSchema.SchemaTraversal do
   @conditional_keywords ["if", "then", "else"]
 
   @doc false
+  def scope_subschemas_with_paths(schema, draft) when is_map(schema) do
+    singles =
+      for key <- @single_schema_keywords ++ @conditional_keywords,
+          child = Map.get(schema, key),
+          schema?(child),
+          do: {[key], child}
+
+    maps =
+      for key <- @schema_map_keywords ++ @definition_keywords ++ ["dependencies"],
+          children = Map.get(schema, key, %{}),
+          is_map(children),
+          {name, child} <- children,
+          schema?(child),
+          do: {[key, name], child}
+
+    lists =
+      for key <- @schema_list_keywords ++ ["items"],
+          children = Map.get(schema, key, []),
+          is_list(children),
+          {child, index} <- Enum.with_index(children),
+          schema?(child),
+          do: {[key, index], child}
+
+    additional =
+      if draft == "draft7" and is_list(schema["items"]) and schema?(schema["additionalItems"]),
+        do: [{["additionalItems"], schema["additionalItems"]}],
+        else: []
+
+    singles ++ maps ++ lists ++ additional
+  end
+
+  def scope_subschemas_with_paths(_schema, _draft), do: []
+
+  @doc false
   def active_subschemas(schema) when is_map(schema) do
     single_subschemas = schemas_at_keys(schema, @single_schema_keywords)
     map_subschemas = schema_map_subschemas(schema, @schema_map_keywords)

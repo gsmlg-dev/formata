@@ -122,6 +122,14 @@ to imported definitions. The old fork conversion entry points remain private.
 * References: local only unless a `:loader` is passed. Unresolvable refs are
   backend validation errors that Formata reports as `:schema` /
   `:unresolved_ref`.
+* Compilation validates keyword shapes against the bundled meta-schema.
+  `Formata.Schema.JSONSchema.check_document/2` exposes document checking;
+  `preflight/2` additionally audits every reference in schema locations,
+  including unused branches/definitions. It reuses the backend URI, pointer
+  and resource-context helpers, retains recursive references without
+  expansion, rejects ambiguous IDs/anchors, bounds input/loaded resources,
+  and captures explicit loaded documents in an immutable loader closure.
+  Annotation values are not scanned as schemas unless selected by a pointer.
 * `validate/3` accepts no options, so nothing can override
   `additionalProperties` / `unevaluatedProperties`.
 * Data must be in the JSON data model; other terms are `:non_json_value`.

@@ -127,8 +127,8 @@ Every expected failure is `{:error, errors}` with a non-empty list of
 Formata keeps the two schema systems separate. A JSON Schema document is
 always validated by `Formata.JSONSchema` itself, never converted into a
 native schema; native schemas are never exported to JSON Schema in order to
-validate data. Formata does not offer schema export or general schema
-conversion.
+validate data. Explicit native schema interchange uses the conservative
+operations described below.
 
 A compiled `%Formata.Schema{}` records its `kind`, `dialect` (JSON Schema
 only), `backend`, and the backend's `compiled` representation. Compile once and
@@ -156,6 +156,23 @@ iex> {:error, [%Formata.Error{code: :required, path: ["children", 0, "name"]}]} 
 ...>   Formata.validate(%{"name" => "root", "children" => [%{}]}, tree)
 ```
 
+### Native schema interchange
+
+`Formata.Schema.Native.to_json_schema(definition, exclude_meta_keys: [:default])`
+returns `{:ok, document}` for MCP/discovery wire descriptions. Unsupported
+custom/dynamic validators return structured errors by default; explicitly use
+`on_unsupported: :omit` to publish an unconstrained description for those nodes.
+Native first-match unions export as `anyOf`. Native validation remains authoritative.
+
+`Formata.Schema.Native.from_json_schema(document)` imports a conservative
+Draft 7 subset into native definitions, with string keys and no atom creation.
+Primitives, numeric/string constraints, objects, lists, enums, constants and
+`anyOf` are supported. `oneOf`, references, formats, closed objects, unknown
+keywords and unsupported assertion combinations return `:conversion_unsupported`
+errors instead of being dropped. Imported definitions use native absent/nil
+and unknown-field semantics. Use `Formata.Schema.json_schema/2` to validate
+JSON Schema semantics directly, including exclusive `oneOf`.
+
 ### JSON Schema
 
 Documents are JSON-compatible maps or `true`/`false`. The dialect comes from a
@@ -164,6 +181,35 @@ Draft 2020-12; conflicts are errors. `format` is an annotation unless
 `format_assertion: true`. Local references resolve without I/O; remote
 references require an explicit `:loader` function. Formata never accesses the
 network. See `Formata.Schema.JSONSchema`.
+
+JSON Schema compilation now checks standard keyword shapes against the
+built-in meta-schema. Malformed constraints return schema errors before
+instance validation. For registration, use the explicit eager preflight:
+
+```elixir
+Formata.Schema.JSONSchema.check_document(%{"type" => "object", "required" => true})
+# {:error, [%Formata.Error{kind: :schema, schema_path: ["required"], ...}]}
+
+Formata.Schema.JSONSchema.preflight(%{
+  "anyOf" => [true, %{"$ref" => "#/$defs/missing"}]
+})
+# {:error, [%Formata.Error{code: :unresolved_ref, ...}]}
+```
+
+`preflight/2` returns `{:ok, compiled_schema}` after auditing references in
+unused branches and definitions. Scoped IDs, anchors, recursive pointers and
+static dynamic-reference targets are checked without expanding recursive
+schemas. Annotation/instance values such as `default` and `const` are not
+schema locations unless selected by a reference. External references require
+an explicit `registry: %{uri => schema}` or `loader:`; loaded resources are
+validated and captured so later validation performs no external I/O.
+
+Registration limits default to depth 128, 100,000 total nodes, 1 MiB per
+resource (Erlang term size), 10,000 references and 1,000 resources. Configure
+`max_depth`, `max_nodes`, `max_bytes`, `max_refs` and `max_resources` explicitly;
+exhaustion returns `:limit_exceeded`, and invalid options return
+`:invalid_option`. `check_document/2` checks document shape and structural
+limits; ordinary `Schema.check/3` does not perform an eager reference audit.
 
 ## Pure validation versus casting
 
@@ -340,23 +386,6 @@ JSON's encoding exceptions. `Formata.decode/3` and `Formata.encode/3` keep
 their portable domain and options.
 
 ## Codecs and value domains
-
-### Native schema interchange
-
-`Formata.Schema.Native.to_json_schema(definition, exclude_meta_keys: [:default])`
-returns `{:ok, document}` for MCP/discovery wire descriptions. Unsupported
-custom/dynamic validators return structured errors by default; explicitly use
-`on_unsupported: :omit` to publish an unconstrained description for those nodes.
-Native first-match unions export as `anyOf`. Native validation remains authoritative.
-
-`Formata.Schema.Native.from_json_schema(document)` imports a conservative
-Draft 7 subset into native definitions, with string keys and no atom creation.
-Primitives, numeric/string constraints, objects, lists, enums, constants and
-`anyOf` are supported. `oneOf`, references, formats, closed objects, unknown
-keywords and unsupported assertion combinations return `:conversion_unsupported`
-errors instead of being dropped. Imported definitions use native absent/nil
-and unknown-field semantics. Use `Formata.Schema.json_schema/2` to validate
-JSON Schema semantics directly, including exclusive `oneOf`.
 
 Decoded data uses ordinary Elixir terms. Document keys stay strings and
 Formata never creates atoms from document content. An absent field is absent

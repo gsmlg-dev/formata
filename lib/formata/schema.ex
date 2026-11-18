@@ -10,8 +10,9 @@ defmodule Formata.Schema do
       compiled and validated by `Formata.JSONSchema`. See
       `Formata.Schema.JSONSchema`.
 
-  A JSON Schema document is never converted into a native schema, and native
-  schemas are never exported to JSON Schema to validate data.
+  Validation never converts between the two systems. Explicit native wire
+  export and conservative import are available through
+  `Formata.Schema.Native.to_json_schema/2` and `from_json_schema/2`.
 
   ## Compiling
 

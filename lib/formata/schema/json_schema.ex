@@ -93,9 +93,10 @@ defmodule Formata.Schema.JSONSchema do
   def compile(document, opts \\ []) when is_list(opts) do
     opts = Keyword.validate!(opts, @compile_opts)
 
-    with :ok <- check_document(document),
+    with :ok <- check_json_document(document),
          {:ok, backend_opts} <- backend_opts(opts),
          :ok <- check_dialect(document, opts),
+         :ok <- Formata.Schema.JSONSchema.Preflight.validate_meta(document, opts),
          {:ok, compiled} <- backend_compile(document, backend_opts) do
       {:ok,
        %Schema{
@@ -109,9 +110,44 @@ defmodule Formata.Schema.JSONSchema do
     end
   end
 
-  defp check_document(document) when is_boolean(document), do: :ok
+  @doc """
+  Checks a schema document against its built-in Draft 7 or 2020-12 meta-schema
+  without validating an instance. Returns `:ok` or structured schema errors.
+  Accepts the compile options and the registration limits listed in `preflight/2`.
+  Only depth, node and byte limits apply to this document-only check.
+  References in the schema document are not required to resolve by this operation.
+  """
+  defdelegate check_document(document, opts \\ []),
+    to: Formata.Schema.JSONSchema.Preflight,
+    as: :check
 
-  defp check_document(document) when is_map(document) and not is_struct(document) do
+  @doc """
+  Compiles a schema for registration after offline meta-schema validation and
+  an eager reference audit, including unused branches and definitions.
+
+  Returns `{:ok, Formata.Schema.t()}` or structured errors. Supports scoped
+  `$id`, anchors, recursive pointers and static targets of `$dynamicRef`.
+  Instance-dependent dynamic scope selection still happens during validation.
+  Annotation/instance values such as `default`, `enum` and `const` are not
+  interpreted as schemas unless selected by a reference.
+
+  External resources require `registry: %{uri => document}` or an explicit
+  `loader:`. Loaded resources are checked before compilation and captured in
+  the returned schema, so later validation performs no loader calls or I/O.
+  Loader responses may include `%{document: schema, base_uri: uri}`.
+
+  Limits: `max_depth: 128` per document, `max_nodes: 100_000` across documents,
+  `max_bytes: 1_048_576` per document (Erlang external term size),
+  `max_refs: 10_000`, and `max_resources: 1_000`. Limits are nonnegative;
+  exhaustion returns `:schema` / `:limit_exceeded`. Invalid options return
+  `:unsupported` / `:invalid_option`. No network loader is supplied by Formata.
+  """
+  defdelegate preflight(document, opts \\ []), to: Formata.Schema.JSONSchema.Preflight
+
+  @doc false
+  def check_json_document(document) when is_boolean(document), do: :ok
+
+  def check_json_document(document) when is_map(document) and not is_struct(document) do
     case Formata.Codec.check_domain(document, json_profile(__MODULE__)) do
       :ok ->
         :ok
@@ -131,7 +167,7 @@ defmodule Formata.Schema.JSONSchema do
     end
   end
 
-  defp check_document(document) do
+  def check_json_document(document) do
     Error.error(
       :schema,
       :invalid_schema,
