@@ -265,12 +265,18 @@ defmodule Formata.NativeSchema.JSONSchema.Encoder do
          true <- integer_opts == float_opts do
       encode_numeric(:float, float_opts, opts)
     else
-      _ -> %{"oneOf" => [convert(integer_schema, opts), convert(float_schema, opts)]}
+      _ ->
+        %{
+          Keyword.get(opts, :union_keyword, "oneOf") => [
+            convert(integer_schema, opts),
+            convert(float_schema, opts)
+          ]
+        }
     end
   end
 
   defp convert({:oneof, types}, opts) when is_list(types) do
-    %{"oneOf" => Enum.map(types, &convert(&1, opts))}
+    %{Keyword.get(opts, :union_keyword, "oneOf") => Enum.map(types, &convert(&1, opts))}
   end
 
   defp convert({:schema, type}, opts), do: convert(type, opts)

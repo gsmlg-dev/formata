@@ -99,12 +99,13 @@ is refused because it calls `String.to_atom/1` on input.
 
 ### JSON Schema
 
-Documents go straight to `Formata.JSONSchema.compile/2`; the native
-`from_json_schema` importer (which turns `oneOf` into a first-match union) is
-not used, nor is native export (which omits unsupported constraints). No
-schema export is offered: the fork's native `to_json_schema/2`
-and `from_json_schema/2` functions are `@doc false` (kept only for the ported upstream
-tests) and are not part of the public API.
+Ordinary JSON Schema validation goes directly to the JSON Schema backend,
+without conversion. Explicit interchange is available through
+`Formata.Schema.Native.to_json_schema/2` and `from_json_schema/2`: wire export
+uses `anyOf` for native unions and requires explicit opt-in to omit custom
+validators; the conservative importer rejects `oneOf` and constraints it
+cannot represent. Native absent/nil and unknown-field semantics still apply
+to imported definitions. The old fork conversion entry points remain private.
 
 * Dialects: Draft 7 and 2020-12 via `$schema` or `dialect:`; conflicts are
   backend `:draft_conflict` errors (`:dialect_conflict`). An unrecognized

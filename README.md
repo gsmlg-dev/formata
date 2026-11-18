@@ -341,6 +341,23 @@ their portable domain and options.
 
 ## Codecs and value domains
 
+### Native schema interchange
+
+`Formata.Schema.Native.to_json_schema(definition, exclude_meta_keys: [:default])`
+returns `{:ok, document}` for MCP/discovery wire descriptions. Unsupported
+custom/dynamic validators return structured errors by default; explicitly use
+`on_unsupported: :omit` to publish an unconstrained description for those nodes.
+Native first-match unions export as `anyOf`. Native validation remains authoritative.
+
+`Formata.Schema.Native.from_json_schema(document)` imports a conservative
+Draft 7 subset into native definitions, with string keys and no atom creation.
+Primitives, numeric/string constraints, objects, lists, enums, constants and
+`anyOf` are supported. `oneOf`, references, formats, closed objects, unknown
+keywords and unsupported assertion combinations return `:conversion_unsupported`
+errors instead of being dropped. Imported definitions use native absent/nil
+and unknown-field semantics. Use `Formata.Schema.json_schema/2` to validate
+JSON Schema semantics directly, including exclusive `oneOf`.
+
 Decoded data uses ordinary Elixir terms. Document keys stay strings and
 Formata never creates atoms from document content. An absent field is absent
 from the map; an explicit null is `nil`.

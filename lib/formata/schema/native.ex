@@ -151,6 +151,44 @@ defmodule Formata.Schema.Native do
   defdelegate except(schema, keys), to: Formata.NativeSchema
 
   @doc """
+  Exports a native definition as a Draft 7 wire description, returning
+  `{:ok, document}` or structured errors. This is not a replacement for
+  native validation: coercions/transforms describe their target, native
+  atoms/temporal values describe their JSON representation, and native
+  optional/required fields retain their native absent/nil semantics.
+
+  `exclude_meta_keys: [:default]` removes private defaults recursively.
+  Unsupported dynamic/custom validators fail by default; explicitly pass
+  `on_unsupported: :omit` to describe them as unconstrained schemas.
+  Native first-match unions become `anyOf`, never exclusive `oneOf`.
+  Reference export, constrained map keys and schema option lists are not
+  supported. Encoding never executes custom validation callbacks.
+  """
+  defdelegate to_json_schema(definition, opts \\ []),
+    to: Formata.Schema.Native.Conversion,
+    as: :export
+
+  @doc """
+  Imports a conservative Draft 7 subset into the native vocabulary.
+
+  Returns `{:ok, definition}` or structured schema/unsupported errors.
+  Supports primitives, string/numeric constraints, typed lists, object
+  properties/required fields, enums, constants, type arrays and `anyOf`.
+  Annotations are discarded; no defaults, coercions or transforms are added.
+  Keys stay strings (`keys: :strings` is the only accepted key mode).
+
+  This produces native definitions, including native optional/nil and
+  unknown-field semantics; it is not an alternative JSON Schema validator.
+  Use `Formata.Schema.json_schema/2` for JSON Schema validation. `oneOf`,
+  references, `allOf`, `format`, closed objects, unknown keywords and
+  combinations the importer cannot preserve are rejected rather than
+  silently dropped. Imported integers accept integral floats.
+  """
+  defdelegate from_json_schema(document, opts \\ []),
+    to: Formata.Schema.Native.Conversion,
+    as: :import_schema
+
+  @doc """
   Checks and compiles a native definition.
 
   Invalid definitions return `:schema` / `:invalid_schema` errors. A definition

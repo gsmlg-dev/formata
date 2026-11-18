@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Public native schema wire export and conservative Draft 7 import through
+  `Formata.Schema.Native.to_json_schema/2` and `from_json_schema/2` (#2).
+  Export supports metadata exclusion and explicit custom-validator omission;
+  native unions use `anyOf`. Import rejects unsupported constraints and
+  exclusive `oneOf`, with structured errors and string-only property keys.
+
 ## [0.3.4] - 2026-11-18
 
 ### Added

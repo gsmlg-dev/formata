@@ -275,7 +275,8 @@ defmodule Formata.NativeSchema.JSONSchema.Decoder do
   @doc false
   def validate_integral_float(value, schema) when is_float(value) do
     if value == trunc(value) do
-      Formata.NativeSchema.validate(apply_numeric(:float, schema), value)
+      with {:ok, _} <- Formata.NativeSchema.validate(apply_numeric(:float, schema), value),
+           do: :ok
     else
       {:error, "expected an integer-valued number"}
     end
