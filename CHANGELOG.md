@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-18
+
 ### Added
 
 - Application JSON APIs for internal request #1: `Formata.JSON.decode/2`
