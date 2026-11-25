@@ -19,6 +19,7 @@ umbrella, schema AST, schema inference, or schema conversion.
 | `Formata.Schema.Native` | `Formata.NativeSchema` adapter, pure-validation preflight, casting |
 | `Formata.Schema.JSONSchema` | `Formata.JSONSchema` adapter |
 | `Formata.JSON` | Application/Phoenix/Plug JSON (strict decode, exact float callbacks, ordered objects, `JSON.Encoder`, pretty output) |
+| `Formata.ImageInfo` | Detect image formats and read MIME types, variants, and dimensions from binaries |
 | `Formata.Transform` | Explicit data transformations |
 | `Formata.Error` | Structured errors |
 
@@ -58,6 +59,7 @@ are in `NOTICE.md`.
 | `backplane_schema` | 1.10.76 | `Formata.NativeSchema` | Native schemas (public vocabulary) |
 | `backplane_json_schema` | 1.10.76 | `Formata.JSONSchema` | JSON Schema compile/validate |
 | `ex_json_pointer` | 0.9.0 | `Formata.JSONPointer` | JSON Pointer for the JSON Schema backend |
+| `ex_image_info` | 1.0.0 | `Formata.ImageInfo` | Image signature and metadata inspection |
 
 Fork rules: no compile-time optional integrations (their presence would depend
 on the consumer's dependency tree), no application environment, no processes.

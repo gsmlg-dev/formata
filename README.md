@@ -6,8 +6,8 @@ Formata decodes and encodes **JSON** (with opt-in comments and trailing
 commas, and an incremental parser for streamed output), **JSON5**, **TOML**,
 and **YAML**, validates data
 against **native schemas** (`Formata.NativeSchema`) or **JSON Schema** documents
-(Draft 7 and Draft 2020-12, via `Formata.JSONSchema`), and keeps every
-lossy step explicit.
+(Draft 7 and Draft 2020-12, via `Formata.JSONSchema`), and reads image
+metadata with `Formata.ImageInfo`. It keeps every lossy step explicit.
 
 It is a plain functional library: no processes, no global state, no caches.
 
@@ -31,8 +31,9 @@ packages in your project: `Formata.JSON.Backend` (from `jason`), `Formata.TOML`
 (`gsmlg_toml`), `Formata.YAML.Reader` and `formata_yaml` (`yaml_elixir`,
 `yamerl`), `Formata.YAML.Writer` (`ymlr`), `Formata.NativeSchema`
 (`backplane_schema`), `Formata.JSONSchema` (`backplane_json_schema`),
-and `Formata.JSONPointer` (`ex_json_pointer`). Only `Formata.NativeSchema`
-is public API (the native schema vocabulary); the other forks are internal.
+`Formata.JSONPointer` (`ex_json_pointer`), and `Formata.ImageInfo`
+(`ex_image_info`). The public fork modules are `Formata.NativeSchema` for
+native schema definitions and `Formata.ImageInfo` for image inspection.
 Versions, licenses, and modifications are listed in [NOTICE.md](NOTICE.md).
 
 ### Namespace migration
@@ -119,8 +120,22 @@ iex> Formata.convert(~s({"name": "api", "debug": null}), :json, :toml, transform
 `Formata.Codec`. `kind` is `:native` or `:json_schema`
 (`Formata.Schema.native/2` and `Formata.Schema.json_schema/2` are shortcuts).
 
-Every expected failure is `{:error, errors}` with a non-empty list of
-`%Formata.Error{}`.
+The operations above report expected failures as `{:error, errors}` with a
+non-empty list of `%Formata.Error{}`.
+
+## Image metadata
+
+`Formata.ImageInfo.info/1` detects the format from an image binary and returns
+`{mime_type, width, height, variant}` or `nil` when it cannot read the
+dimensions. Use `type/1` for the MIME type and variant, or `seems?/1` for
+the apparent format as an atom. All three functions accept an optional format
+as the second argument.
+
+```elixir
+image = File.read!("photo.jpg")
+Formata.ImageInfo.info(image)
+# {"image/jpeg", 1920, 1080, "baseJPEG"}
+```
 
 ## Schemas
 

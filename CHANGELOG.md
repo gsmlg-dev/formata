@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `Formata.ImageInfo` reads image formats, MIME types, variants, and dimensions
+  from binaries using a namespaced fork of `ex_image_info` 1.0.0.
+
 ## [0.3.5] - 2026-11-18
 
 ### Added

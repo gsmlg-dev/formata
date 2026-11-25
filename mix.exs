@@ -26,8 +26,8 @@ defmodule Formata.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
-  # Formata has no runtime dependencies: the codec and schema backends are
-  # maintained forks under lib/formata/ and src/ (see NOTICE.md).
+  # Forked modules under lib/formata/ and src/ keep Formata free of runtime
+  # dependencies (see NOTICE.md).
   defp deps do
     [
       {:ex_doc, "~> 0.40", only: :dev, runtime: false}
@@ -77,7 +77,13 @@ defmodule Formata.MixProject do
           Formata.NativeSchema.Error,
           Formata.NativeSchema.Walker
         ],
-        Support: [Formata.JSON, Formata.JSON.OrderedObject, Formata.Transform, Formata.Error]
+        Support: [
+          Formata.JSON,
+          Formata.JSON.OrderedObject,
+          Formata.ImageInfo,
+          Formata.Transform,
+          Formata.Error
+        ]
       ],
       filter_modules: &public_module?/2,
       skip_code_autolink_to: &internal_reference?/1
@@ -85,11 +91,10 @@ defmodule Formata.MixProject do
   end
 
   # Mentions of internal fork modules stay plain code text in the docs.
-  @internal_ref ~r/^(?:[tc]:)?Formata\.(?:JSON\.Backend\b|TOML\b|YAML\b|JSONPointer\b|JSONSchema\b|NativeSchema\.(?!(?:Error|Walker)\b)[A-Z])/
+  @internal_ref ~r/^(?:[tc]:)?Formata\.(?:JSON\.Backend\b|ImageInfo\.[A-Z]|TOML\b|YAML\b|JSONPointer\b|JSONSchema\b|NativeSchema\.(?!(?:Error|Walker)\b)[A-Z])/
   defp internal_reference?(term), do: Regex.match?(@internal_ref, term)
 
-  # Forked backends are internal, except the native schema vocabulary
-  # (`Formata.NativeSchema`) that callers use to define schemas.
+  # Expose the native schema vocabulary and the image inspection API.
   @internal ~w(TOML YAML JSONPointer JSONSchema NativeSchema)
   defp public_module?(module, _metadata) do
     case Module.split(module) do
@@ -97,6 +102,7 @@ defmodule Formata.MixProject do
       ["Formata", "NativeSchema", "Error"] -> true
       ["Formata", "NativeSchema", "Walker"] -> true
       ["Formata", "JSON", "Backend" | _] -> false
+      ["Formata", "ImageInfo", _ | _] -> false
       ["Formata", name | _] -> name not in @internal
       _ -> true
     end

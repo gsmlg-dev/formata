@@ -16,6 +16,8 @@ defmodule Formata.NamespaceTest do
           Formata.NativeSchema.Walker,
           Formata.JSONSchema,
           Formata.JSONPointer,
+          Formata.ImageInfo,
+          Formata.ImageInfo.Parsers.ISOBMFF,
           :formata_yaml_constr,
           :formata_yaml_parser
         ] do
@@ -28,6 +30,7 @@ defmodule Formata.NamespaceTest do
       "Elixir.Formata.YamlElixir",
       "Elixir.Formata.Ymlr",
       "Elixir.Formata.Backplane",
+      "Elixir.ExImageInfo",
       "Elixir.Formata.ExJSONPointer",
       "Elixir.Formata.Vendor",
       "formata_yamerl"

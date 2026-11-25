@@ -1,8 +1,8 @@
 # Third-party notices
 
-Formata has no runtime dependencies. Its codec and schema backends are
-maintained forks of the packages below, copied from the published Hex
-releases, renamed into the `Formata` namespace, and modified as described.
+Formata has no runtime dependencies. It maintains forks of the packages below,
+copied from the published Hex releases, renamed into the `Formata` namespace,
+and modified as described.
 The original license texts are in [`LICENSES/`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/) and are shipped in
 the Hex package.
 
@@ -16,6 +16,7 @@ the Hex package.
 | `backplane_schema` | 1.10.76 | https://github.com/gsmlg-opt/backplane (tag `v1.10.76`, `8330b68`, `apps/backplane_schema`) | MIT ([`LICENSES/backplane_schema.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/backplane_schema.txt)) | `Formata.NativeSchema*` — `lib/formata/native_schema*` |
 | `backplane_json_schema` | 1.10.76 | https://github.com/gsmlg-opt/backplane (tag `v1.10.76`, `8330b68`, `apps/backplane_json_schema`) | Apache-2.0, declared in package metadata; no license file or copyright notice is shipped upstream ([`LICENSES/Apache-2.0.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/Apache-2.0.txt)) | `Formata.JSONSchema*` — `lib/formata/json_schema*` |
 | `ex_json_pointer` | 0.9.0 | https://github.com/xinz/ex_json_pointer | MIT ([`LICENSES/ex_json_pointer.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/ex_json_pointer.txt)) | `Formata.JSONPointer*` — `lib/formata/json_pointer*` |
+| `ex_image_info` | 1.0.0 | [Group4Layers/ex_image_info](https://github.com/Group4Layers/ex_image_info/tree/f9c8315ae562372c08c20e883683057782ecca5a) (`lib/` matches the Hex release) | MIT ([`LICENSES/ex_image_info.txt`](https://github.com/gsmlg-dev/formata/blob/main/LICENSES/ex_image_info.txt)) | `Formata.ImageInfo*` — `lib/formata/image_info*` |
 
 ## Modifications common to all forks
 
@@ -47,6 +48,8 @@ Bug fixes made in Formata after forking are listed in `CHANGELOG.md`.
   compile-time Decimal integration; exponent tokens retain the negative-zero sign.
 - Promote the ordered-object wrapper to `Formata.JSON.OrderedObject` and add
   Elixir `JSON.Encoder` support using OTP's checked key-value-list encoder.
+- `Formata.ImageInfo` uses explicit pins for size variables in binary patterns
+  and removes unused code for compatibility with Elixir 1.20's compiler checks.
 
 ## Original implementation
 
@@ -69,6 +72,10 @@ TOML authors). See `test/fixtures/toml-test/PROVENANCE.md` for the file list
 and license text. Fixtures for the forked packages' own test suites are
 described by the `PROVENANCE.md` file in each backend's `test/fixtures/`
 directory. Test fixtures are not included in the Hex package.
+
+The `ex_image_info` binary mock tests and their synthetic ISOBMFF fixtures
+come from the commit above. They are under `test/formata/image_info/mocks/`
+and `test/support/formata/image_info/`.
 
 `test/fixtures/yaml-test-suite/` contains 21 scoped leaf cases from the
 official [YAML Test Suite](https://github.com/yaml/yaml-test-suite), pinned
