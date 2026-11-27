@@ -100,6 +100,8 @@ jobs:
       - run: mix format --check-formatted
       - run: MIX_ENV=test mix compile --warnings-as-errors --force
       - run: mix test
+      - name: Check downstream native schema Dialyzer
+        run: MIX_ENV=prod mix run --no-start scripts/check_native_export_dialyzer.exs
       - run: mix docs
       - run: mix hex.build
 

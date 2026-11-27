@@ -23,6 +23,7 @@ mix format --check-formatted
 )
 mix compile --warnings-as-errors --force
 mix test
+MIX_ENV=prod mix run --no-start scripts/check_native_export_dialyzer.exs
 mix docs
 mix hex.build
 ```
@@ -31,6 +32,20 @@ mix hex.build
 under `test/formata/`, the TOML 1.0.0 `toml-test` suite, and the required
 JSON-Schema-Test-Suite cases for Draft 7 and Draft 2020-12. Run it on the
 oldest supported Elixir (1.18) as well; CI does.
+
+The native-export Dialyzer gate compiles the original Issue #4 consumer probe
+and checks it with Formata in the dependency PLT. It also covers native schema
+compilation and the downstream list-to-map dispatch. Every consumer warning
+fails the command; the fixtures have no warning suppressions or return-type
+annotations that could conceal the failure. This catches the case where runtime
+export works but the dependency's inferred type excludes `{:ok, document}`.
+
+The gate uses OTP's built-in Dialyzer and adds no package dependencies. Its PLT
+cache under `_build/prod/native_export_dialyzer` is keyed by the analyzer version
+and every dependency BEAM's path and contents, so changing Formata or the runtime
+forces a new PLT. Consumer fixtures are compiled and analyzed on every run.
+CI runs this gate on the reported Elixir 1.19.5 / OTP 28.5.0.5 toolchain as well
+as the current release toolchain.
 
 The separate `erlc` gate compiles every shipped Erlang runtime source into
 a fresh temporary directory, so cached BEAM files cannot skip it. `-Werror`

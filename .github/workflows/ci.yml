@@ -49,6 +49,33 @@ jobs:
         if: matrix.lint
       - run: mix compile --warnings-as-errors --force
 
+  native-export-dialyzer:
+    name: Native export Dialyzer (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: "1.19.5"
+            otp: "28.5.0.5"
+          - elixir: "1.20.4"
+            otp: "28.5"
+    env:
+      MIX_ENV: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+      - uses: actions/cache@v4
+        with:
+          path: _build/prod/native_export_dialyzer
+          key: native-export-plt-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ github.sha }}
+          restore-keys: |
+            native-export-plt-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-
+      - run: mix run --no-start scripts/check_native_export_dialyzer.exs
+
   package:
     name: Package
     runs-on: ubuntu-24.04

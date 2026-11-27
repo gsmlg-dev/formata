@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-27
+
+### Fixed
+
+- Include the existing `:union_keyword` option in the native JSON Schema
+  encoder's type contract. Downstream Dialyzer analysis on OTP 28 can now
+  retain successful native exports instead of inferring an error-only
+  return (#4). Public APIs, wire schemas, and structured errors are unchanged.
+
+### Added
+
+- Strict consumer Dialyzer regression checks using the original issue probe,
+  native compilation, and map/list projection, with Formata in the dependency
+  PLT and no warning exceptions. CI and Release run the check alongside
+  runtime regressions for successful exports and invalid definitions.
+
 ## [0.4.0] - 2026-11-25
 
 ### Added

@@ -31,9 +31,12 @@ defmodule Formata.NativeSchema.JSONSchema.Encoder do
   Prefer `Formata.NativeSchema.to_json_schema/2` as the public entry point.
   """
 
+  # Conversion.export/2 always supplies :union_keyword; omitting it here makes
+  # Dialyzer treat that call as non-returning even though encoding succeeds.
   @type opts :: [
           on_unsupported: :omit | :true_schema | :raise,
-          exclude_meta_keys: [atom]
+          exclude_meta_keys: [atom],
+          union_keyword: String.t()
         ]
 
   defmodule UnsupportedTypeError do
